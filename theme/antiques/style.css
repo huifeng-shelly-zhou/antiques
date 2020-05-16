@@ -1,0 +1,68 @@
+/*
+Theme Name: Antiques Theme 2020
+Theme URI: 
+Description: Customized by Shelly Zhou
+ 
+Author: Shelly
+Version: 1.0
+Tags: antiques cms
+*/
+
+body {	
+	background-color: #fff;
+	font-family: Arial, Helvetica, sans-serif;
+}
+table, tr, td { vertical-align: text-top;}
+tr:nth-child(even){background-color: #f2f2f2}
+
+.body-wraper{
+	position: absolute; 
+	height:100%;
+	width:100%;
+	background-image: url('/wp-content/themes/antiques/images/bg_home.jpg');
+	background-repeat: no-repeat;
+	background-size: cover;
+	
+}
+
+.title-box{
+	left: 45%;top: 35%;
+	position: absolute; 
+	width: 160px;
+	height: 400px; 
+	margin-left: -10px; 
+	margin-top: -10px;
+}
+
+.title-box .title{
+	font-size: 88px; 
+	font-weight: bold;
+	color: #802b00;
+}
+
+.title-box .desc{
+	font-size: 48px; 
+	font-weight: bold;
+	color: #bf8040;
+	position: absolute;
+	top: 100px;
+	padding-left:20px;
+}
+
+@media (max-width: 768px) {
+  .title-box{		
+		top: 25%;		
+		width: 100px;
+		height: 300px; 
+		margin-left: -10px; 
+		margin-top: -10px;
+	}
+
+	.title-box .title{
+		font-size: 58px; 		
+	}
+
+	.title-box .desc{
+		font-size: 28px;
+	}
+}
