@@ -6,7 +6,7 @@
 *
 */
 
-class AIT_BP_Rewrite {
+class Antiques_API_Rewrite {
 
 
 	private $name;

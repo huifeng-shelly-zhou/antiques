@@ -2,11 +2,11 @@
 error_reporting(E_ALL);
 
 
-global $ait_garfield;
-$ait_garfield = new AIT_CENTRALIZED();
+global $antiquea_apis;
+$antiquea_apis = new ANTIQUES_APIS();
 
 
-class AIT_CENTRALIZED {
+class ANTIQUES_APIS {
 	
 	private $name;
 	private $version;
@@ -23,13 +23,13 @@ class AIT_CENTRALIZED {
 	
 	private function load_dependencies() {
 	
-		require_once plugin_dir_path( dirname( __FILE__ ) ) . 'classes/class-ait-wp-rewrite.php';
+		require_once plugin_dir_path( dirname( __FILE__ ) ) . 'classes/class-antiques-wp-rewrite.php';
 		require_once plugin_dir_path( dirname( __FILE__ ) ) . 'includes/setting.php';
+		require_once plugin_dir_path( dirname( __FILE__ ) ) . 'classes/class-user.php';
 		
 	}
 	
 	public function init_hooks(){
-			
 		/**
 		** add a rewrite rule to plugin page.
 		**	
@@ -38,23 +38,18 @@ class AIT_CENTRALIZED {
 		** 		http://domain.com/index.php?'.$name.'=$controller&action=$action
 		
 		example:
-		/garfield/api/categories : all category
-		/garfield/api/categories/<id> : post list on specific category
-		/garfield/api/categories/<id>/<postid> : post on specific category
-		/garfield/api/post/<postid> : post on default category
-		/garfield/api/author/<authorid>
-		/garfield/api/popular/<1/7/30>
-		
-		format sample:
-		https://s3-ap-southeast-1.amazonaws.com/bastille-source/categories.json
-		https://s3-ap-southeast-1.amazonaws.com/bastille-source/category-0.json
+		/OX/api/categories : all category
+		/OX/api/categories/<id> : post list on specific category		
+		/OX/api/post/<postid> : post on default category
+		/OX/api/user/<userid>
+	
 		**/
 		
-		$this->name='garfield';
+		$this->name='OX';
 		$this->version='1.0.0';	
 		$this->controllers = array('api');
 				
-		$plugin_rewrite = new AIT_BP_Rewrite( $this->name, $this->version );	
+		$plugin_rewrite = new Antiques_API_Rewrite( $this->name, $this->version );	
 		add_action( 'init', array( &$plugin_rewrite, 'add_rewrite_rules' ) );
 		add_filter( 'query_vars', array( &$plugin_rewrite, 'rewrite_query_vars') );	
 		add_action( 'template_redirect', array( &$this, 'action_redirect') );	
@@ -68,7 +63,7 @@ class AIT_CENTRALIZED {
 	
 	public function action_redirect(){
 		
-		global $AIT_KEY, $AIT_SECRET;
+		global $API_KEY, $API_SECRET;
 		
 	
 		
@@ -97,7 +92,7 @@ class AIT_CENTRALIZED {
 		
 		// validate key and secret
 		$headers = $this->parseRequestHeaders();
-		if($headers["Key"] != $AIT_KEY || $headers["Secret"] != $AIT_SECRET)
+		if($headers["Key"] != $API_KEY || $headers["Secret"] != $API_SECRET)
 		{
 			$arr = array('success'=> false,'message'=>'Incorrect key and secret pair.');
 			die( json_encode($arr) );
@@ -107,8 +102,8 @@ class AIT_CENTRALIZED {
 		
 		$result = array(
 			'success'=> false,
-			//'headers'=>$headers,
-			//'controller'=>$current_controller,
+			'headers'=>$headers,
+			'controller'=>$current_controller,
 			'action'=> str_replace('/', ' ', $action),
 			'message'=>''
 			
@@ -224,37 +219,7 @@ class AIT_CENTRALIZED {
 		return $source;
 	}
 
-	private function getHightlightOptions(){
-		$highlight_options = get_terms( 'highlight_option', 'orderby=term_id&order=ASC&hide_empty=0' ); //Will return WP_Error, if any of $taxonomies do not exist.
-
-		if ( is_wp_error($highlight_options) ) {
-			return array();
-		}
-		
-		$require_seqs_setting=array(
-				'homepage' => array('首頁精選新聞(十二宮格)指定位置','(只有被設定為 分類推介的文章該選項才有效, 在文章發布當天被指定位置)','0','11'),
-				'feature' => array('首頁頭條順序','','0','3'),
-				'recommended' => array('分類推介 ( 九/十八宮格) 指定位置','(只有被設定為 分類推介的文章該選項才有效, 在文章發布當天被指定位置)','0','17'),
-				'recommended_15267' => array('Hot TV 分類推介指定位置','(只有被設定為 分類推介的文章該選項才有效, 在文章發布當天被指定位置)','0','17'),			
-			);			
-		
-		
-		if (!empty($highlight_options) && count($highlight_options) > 0) {	
-		
-			foreach ($highlight_options as $highlight_option) {	
-			
-				if (isset($require_seqs_setting[$highlight_option->slug])) {					
-					
-					$highlight_option->require_seqs = $require_seqs_setting[$highlight_option->slug];					
-				}			
-			}
-		}
-		else{
-			return array();
-		}
-		
-		return $highlight_options;
-	}
+	
 
 	private function savePostAutoSetting( $post, $auto_social_share, $auto_facebook_post ) {	
 		if ( !is_a($post, 'WP_Post') ){
@@ -508,66 +473,8 @@ class AIT_CENTRALIZED {
 	**
 	*/
 	private function user_login(){
-		global $ALLOWED_ROLES;		
-		
-		$result = array(
-			'success'=> false,
-			'message'=>'',			
-			'source'=> $this->getSource(),		
-			'user' => null
-		);
-		
-		// check required parameters
-		if ( !isset($_POST['username']) ){			
-			$result['message'] = 'User name is not found!';
-			return $result;
-		}
-		
-		if ( !isset($_POST['password']) ){			
-			$result['message'] = 'Password not found!';
-			return $result;
-		}
-		// end check required parameters
-		
-		$username  = trim($_POST['username']);
-		$password = trim($_POST['password']);		
-		
-		$user = wp_authenticate( $username , $password ); 
-		
-		if ( is_wp_error( $user ) ) {
-			$result['message'] = $user->get_error_message();
-			return $result;
-		}
-		
-		
-		// check user right		
-		$allowed = false;
-		foreach ($user->roles as $role){
-			if (in_array($role, $ALLOWED_ROLES)){
-				$allowed = true;
-				break;
-			}
-		}
-		
-		if (!$allowed){
-			header('HTTP/1.0 401 Unauthorized');
-			$result['message'] ='You are unauthorized.';
-			return $result;
-		}
-		// end check user right
-		
-		$result['success'] = true;
-		$centra_user = new AIT_CENTRA_USER;
-		$centra_user->setUser($user);
-		
-		
-		//update user token		
-		$newToken = $centra_user->genToken();
-		$this->updateToken($centra_user->id, $newToken, $centra_user->token_expiration);				
-		
-		$result['user'] = $centra_user;
-		return $result;
-		
+				
+		return (new ANTIQUES_USER())->login($_POST);
 	}
 
 	
@@ -1582,7 +1489,7 @@ class AIT_CENTRALIZED {
 			foreach($posts as $p){
 				$central_post = new AIT_CENTRA_POST($p);
 				$central_post->find_more_options();				
-				$central_post->find_highlighted( $this->getHightlightOptions());
+				
 				$centralized_cat->posts[] = $central_post;
 			}
 			
@@ -1690,7 +1597,7 @@ class AIT_CENTRALIZED {
 			foreach($posts as $p){
 				$central_post = new AIT_CENTRA_POST($p);
 				$central_post->find_more_options();				
-				$central_post->find_highlighted( $this->getHightlightOptions());
+				
 				$item['posts'][] = $central_post;
 			}
 			
@@ -1793,14 +1700,13 @@ class AIT_CENTRALIZED {
 		$result['total'] = $query->found_posts;		
 		if ( $query->have_posts()){	
 
-			$options = $this->getHightlightOptions();
+			
 			
 			
 			foreach($query->posts as $p){
 				
 				$central_post = new AIT_CENTRA_POST( $p );
 				$central_post->find_more_options();				
-				$central_post->find_highlighted( $this->getHightlightOptions());				
 				
 				$result['posts'][]  = $central_post;
 			}					
@@ -1868,7 +1774,7 @@ class AIT_CENTRALIZED {
 				$central_post->post_content =  do_shortcode($post->post_content);				
 				$central_post->find_more_meta();
 				$central_post->find_more_options();				
-				$central_post->find_highlighted( $this->getHightlightOptions(), false );				
+								
 				$central_post->find_seo_tags(false);
 				
 				if ( $can_edit ){
@@ -2096,7 +2002,7 @@ class AIT_CENTRALIZED {
 			$central_post->find_more_meta();
 			$central_post->find_more_options();			
 			$central_post->find_seo_tags(false);
-			$central_post->find_highlighted( $this->getHightlightOptions(), false );	
+				
 			$result['post']	= $central_post;
 			$result['success'] = true;
 		}
@@ -3092,33 +2998,6 @@ class AIT_CENTRALIZED {
 	}
 
 	
-	/*
-	** list all highlight options	
-	*/
-	private function highlight_list(){
-		
-		$result = array(
-			'success'=> false,
-			'message'=>'',
-			'source'=> $this->getSource(),
-			'items' => array(),
-		);		
-		
-		// validate user has the right to create new user
-		$user_id= $this->validateToken();
-		if ($user_id==false){
-			header('HTTP/1.0 401 Unauthorized');
-			$result['message'] = 'Invalid token!';
-			return $result;			
-		}
-		
-		$result['success'] = true;
-		$result['items'] = $this->getHightlightOptions();
-		
-		return $result;
-		
-	}
- 
 
 	/*
 	** search terms by search text	

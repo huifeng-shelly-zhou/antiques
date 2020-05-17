@@ -8,8 +8,7 @@ Author:      Shelly Zhou
 Author URI:  https://www.antiques-fun.club/
 */
 
-//require_once "classes/class-feeds.php";
-//require_once "classes/class-ait-centralized-api.php";
+require_once "classes/class-antiques-apis.php";
 
 
 
