@@ -72,6 +72,7 @@ class ANTIQUES_USER
 		return $this->token;
 	}//genToken
 	
+
 	private function updateToken($user_id, $newToken, $newExpiration){
 		
 		$member_mapping = get_option( 'antiques_member_mapping', array()); //(mixed) Value set for the option.
@@ -90,9 +91,63 @@ class ANTIQUES_USER
 	}
 	
 	
-	public function login($post_data){
+	public function validateToken(){		
+			
+		if (!isset($_POST['token']) || empty($_POST['token'])){
+			return false;
+		}			
 		
-		global $ALLOWED_ROLES;		
+		$token = trim($_POST['token']);
+		$member_mapping = get_option( 'antiques_member_mapping', array()); //(mixed) Value set for the option.
+		
+		//invalid token
+		if ( !isset($member_mapping[$token]) || !isset($member_mapping[$token]['id']) || !isset($member_mapping[$token]['expiration']) ){
+			return false;
+		}
+		
+		$user_id = $member_mapping[$token]['id'];
+		$myDate = new DateTime("now", new DateTimeZone("Asia/Hong_Kong"));		
+		$now = $myDate->format( DateTime::ATOM ); 
+		
+		
+		$hasValidToken = false;
+		$expiredTokens = array();
+		foreach ($member_mapping as $token=>$member){
+			
+			if ( isset($member['id']) && $member['id'] == $user_id && isset($member['expiration'])){
+				
+				if ($member['expiration'] <= $now){
+					$expiredTokens[] = $token;
+				}
+				else{
+					$hasValidToken = true;
+				}				
+			}			
+		}
+		
+		// remove expried tokens
+		if ( count($expiredTokens)>0 ){
+			foreach($expiredTokens as $t){
+				unset($member_mapping[$t]);	
+			}
+			
+			// save change
+			if (!update_option( 'antiques_member_mapping', $member_mapping )){		
+				add_option( 'antiques_member_mapping', $member_mapping );
+			}
+		}
+		
+		
+		//all user tokens expried
+		if ( $hasValidToken == false ){
+			return false;
+		}
+		
+		return $user_id;
+		
+	}//validateToken
+	
+	public function login($post_data){
 		
 		$result = array(
 			'success'=> false,
@@ -100,44 +155,32 @@ class ANTIQUES_USER
 			'user' => null
 		);
 		
-		// check required parameters
-		if ( !isset($_POST['username']) ){			
-			$result['message'] = 'User name is not found!';
+		if (!isset($post_params['authorize']) || empty($post_params['authorize'])){
+		
+			$result->success = false;
+			$result->message = apiLang('Error on validating user login session.', $lang);
+			$result->data = null;
 			return $result;
 		}
 		
-		if ( !isset($_POST['password']) ){			
-			$result['message'] = 'Password not found!';
+		list($email, $password)=explode(':',base64_decode($post_params['authorize']));
+		
+		// check email is verified
+		$user = get_user_by( 'email', $email ); // return WP_User object on success, false on failure.
+		if ( is_a($user, 'WP_User') && get_user_meta($user->ID, 'user-approved', true) != '1'){
+			$result->success = false;
+			$result->message = '<span>Please verify your account before login! <a href="/login/?action=send_verfication&email='.base64_encode($user->user_email).'">Resend Verification Link</a></span>';	
+			$result->data = null;			
 			return $result;
 		}
-		// end check required parameters
 		
-		$username  = trim($_POST['username']);
-		$password = trim($_POST['password']);		
-		
-		$user = wp_authenticate( $username , $password ); 
+		$user = wp_authenticate( $email , $password ); 
 		
 		if ( is_wp_error( $user ) ) {
 			$result['message'] = $user->get_error_message();
 			return $result;
 		}
 		
-		
-		// check user right		
-		$allowed = false;
-		foreach ($user->roles as $role){
-			if (in_array($role, $ALLOWED_ROLES)){
-				$allowed = true;
-				break;
-			}
-		}
-		
-		if (!$allowed){
-			header('HTTP/1.0 401 Unauthorized');
-			$result['message'] ='You are unauthorized.';
-			return $result;
-		}
-		// end check user right
 		
 		$result['success'] = true;
 		
@@ -152,6 +195,87 @@ class ANTIQUES_USER
 		
 	}
 	
+	
+	public function register($post_params){
+		
+		$result = array(
+			'success'=> false,
+			'message'=>'',
+		);
+		
+		if (!isset($post_params['authorize']) || empty($post_params['authorize'])){		
+			$result->data = null;
+			$result->message = 'Error. No email and password.';		
+			return $result;
+		}
+		
+		list($email, $password)=explode(':',base64_decode($post_params['authorize']));
+		
+		if (is_email( $email ) == false){
+			$result->message = '电子信箱格式不符!';
+			$result->data = null;
+			return $result;
+		}	
+		else if (validatePassword($password) !== true){
+			$result->message= '密码需多于八个字符!';
+			$result->data = null;		
+			return $result;
+		}	
+		else if (email_exists($email)){
+			$result->message = '此电子信箱已被注册, 请使用其他电子信箱或点击此处重置密码!';	
+			$result->data = null;		
+			return $result;
+		}
+		else {		
+			
+			$user_id = wp_create_user( $email, $password, $email );//When successful returns the user ID,In case of failure (username or email already exists) the function returns an error object;
+			
+			if (is_wp_error($user_id)){
+				$result->message = $user_id->get_error_message();				
+				return $result;
+			}
+			else if (is_int($user_id) && $user_id > 0){
+				
+				// update user first and last name
+				$args = array(
+					'ID' => $user_id,
+				);
+				$display_name = '';
+				if ( isset($post_params['first_name']) && !empty($post_params['first_name']) ){
+					$args['first_name'] = sanitize_text_field($post_params['first_name']);								
+				}
+				
+				if ( isset($post_params['last_name']) && !empty($post_params['last_name']) ){
+					$args['last_name'] = sanitize_text_field($post_params['last_name']);
+				}	
+				
+				if ( isset($args['first_name']) && isset($args['last_name']) ){
+					$args['display_name'] = $args['first_name'] . ' ' . $args['last_name'];
+				}
+				
+				wp_update_user( $args ); //If successful, returns the user_id, otherwise returns a WP_Error object.
+				
+				
+				// set user role to vendor
+				$user_info  = get_userdata( $user_id );
+				$user_info->set_role('antique_player');
+				
+				$result->success = true;				
+				$result->message = '注册成功！请到您的电子邮箱查看您的验证电子邮件！';
+				
+				// send email to notify new user
+				if (function_exists('emailNewAccount')){
+					emailNewAccount($user_id);
+				}			
+			}
+			else {
+				$result->message = 'Registration is not success due to some reason. Please try again!';
+			}
+			
+		}	
+		
+		return $result;
+	}
 }
 
 ?>

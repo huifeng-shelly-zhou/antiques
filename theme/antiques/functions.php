@@ -13,6 +13,11 @@ if (file_exists( dirname(__FILE__) .'/includes/admin/sub-functions.php')) {
 	require_once ('includes/admin/sub-functions.php');
 }
 
+//Emails functions
+if (file_exists( dirname(__FILE__) .'/includes/admin/sub-functions-emails.php')) {
+	require_once ('includes/admin/sub-functions-emails.php');
+}
+
 
 //Making jQuery Google API
 function modify_jquery() {

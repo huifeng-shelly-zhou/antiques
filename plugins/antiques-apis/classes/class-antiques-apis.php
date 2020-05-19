@@ -25,8 +25,7 @@ class ANTIQUES_APIS {
 	
 		require_once plugin_dir_path( dirname( __FILE__ ) ) . 'classes/class-antiques-wp-rewrite.php';
 		require_once plugin_dir_path( dirname( __FILE__ ) ) . 'includes/setting.php';
-		require_once plugin_dir_path( dirname( __FILE__ ) ) . 'classes/class-user.php';
-		
+		require_once plugin_dir_path( dirname( __FILE__ ) ) . 'classes/class-user.php';		
 	}
 	
 	public function init_hooks(){
@@ -73,6 +72,15 @@ class ANTIQUES_APIS {
 			return;
 		}
 		
+		// validate action	
+		$action = get_query_var( 'action' );	
+		
+		if ( $action == 'ZGE3MzRmanB5dWhhZzQ' ){			
+
+			include(plugin_dir_path( dirname( __FILE__ ) ) .'api_doc.php');
+			die(); 
+		}
+		
 		
 		header('Content-Type: application/json');
 		
@@ -82,12 +90,11 @@ class ANTIQUES_APIS {
 		}
 		
 		
-		// validate action	
-		$action = get_query_var( 'action' );	
 		if ( empty( $action ) ) {
 			$arr = array('success'=> false,'message'=>'Action is required.');
 			die( json_encode($arr) );
 		}
+		
 		
 		
 		// validate key and secret
@@ -134,92 +141,6 @@ class ANTIQUES_APIS {
 		return $headers;
 	}
 		
-	private function validateToken(){		
-			
-		if (!isset($_POST['token']) || empty($_POST['token'])){
-			return false;
-		}			
-		
-		$token = trim($_POST['token']);
-		$member_mapping = get_option( 'bp_centralized_member_mapping', array()); //(mixed) Value set for the option.
-		
-		//invalid token
-		if ( !isset($member_mapping[$token]) || !isset($member_mapping[$token]['id']) || !isset($member_mapping[$token]['expiration']) ){
-			return false;
-		}
-		
-		$user_id = $member_mapping[$token]['id'];
-		$myDate = new DateTime("now", new DateTimeZone("Asia/Hong_Kong"));		
-		$now = $myDate->format( DateTime::ATOM ); 
-		
-		
-		$hasValidToken = false;
-		$expiredTokens = array();
-		foreach ($member_mapping as $token=>$member){
-			
-			if ( isset($member['id']) && $member['id'] == $user_id && isset($member['expiration'])){
-				
-				if ($member['expiration'] <= $now){
-					$expiredTokens[] = $token;
-				}
-				else{
-					$hasValidToken = true;
-				}				
-			}			
-		}
-		
-		// remove expried tokens
-		if ( count($expiredTokens)>0 ){
-			foreach($expiredTokens as $t){
-				unset($member_mapping[$t]);	
-			}
-			
-			// save change
-			if (!update_option( 'bp_centralized_member_mapping', $member_mapping )){		
-				add_option( 'bp_centralized_member_mapping', $member_mapping );
-			}
-		}
-		
-		
-		//all user tokens expried
-		if ( $hasValidToken == false ){
-			return false;
-		}
-		
-		return $user_id;
-		
-	}//validateToken
-	
-	private function updateToken($user_id, $newToken, $newExpiration){
-		
-		$member_mapping = get_option( 'bp_centralized_member_mapping', array()); //(mixed) Value set for the option.
-		
-		// add new record
-		$member_mapping[$newToken] = array(
-			'id' => $user_id,
-			'expiration' => $newExpiration
-		);
-		
-		
-		// update mapping
-		if (!update_option( 'bp_centralized_member_mapping', $member_mapping )){		
-			add_option( 'bp_centralized_member_mapping', $member_mapping );
-		}
-		
-	}
-
-	private function getSource(){
-		global $SOURCE_LIST;
-		
-		$source = $_SERVER['HTTP_HOST'];
-		if (isset($SOURCE_LIST[$source])){
-			$source = $SOURCE_LIST[$source];
-		}
-		
-		return $source;
-	}
-
-	
 
 	private function savePostAutoSetting( $post, $auto_social_share, $auto_facebook_post ) {	
 		if ( !is_a($post, 'WP_Post') ){
@@ -442,26 +363,11 @@ class ANTIQUES_APIS {
 		
 		return array( $now, $user_id );
 	}
-
-	private function validatePassword($password){
-		
-		if ( !isset($password) || empty($password) ) {
-			return 'Password not set!';	
-		}
-		
-		$exp = '/^(?=.*\d)((?=.*[a-z])|(?=.*[A-Z])).{6,32}$/';
-		
-		if(strlen($password)<6 || !preg_match($exp, $password) ){
-			
-			return 'Password must be alphanumeric and contains minimum 6 characters!';				
-		}
-		
-		return true;
-	}
+	
 
 	/*
 	** User Login 		
-	**	 Url: /garfield/api/user/login
+	**	 Url: /OX/api/user/login
 	**	 Post data:
 	**	   username  -  string required
 	**	   password -  string required
@@ -779,639 +685,27 @@ class ANTIQUES_APIS {
 		
 	}
 	
+		
 	
 	/*
-	** User validate (Validate before create user. For admin only.)
-	** 		Method: POST
-	** 		Url:/garfield/api/user/validate
-	** 		Post data:
-	** 		  token: string required (get it from user login response)
-	** 		  email -  string required
-	** 		  password -  string required	
-	** 		  username -  string (optional, if provided, will check the existing, if not provided, will use email before @ string to validate user name) 
-	** 		Response:
-	** 		  success:  true or false
-	** 		  message: String
-	** 		  source: String
-	** 
-	*/	
-	private function user_validate(){
-		global $ALLOWED_ROLES;			
-		
-		$result = array(
-			'success'=> false,			
-			'message'=>'',
-			'source'=> $this->getSource(),				
-		);
-		
-		
-		// validate user has the right to create new user
-		$user_id= $this->validateToken();
-		if ($user_id==false){
-			header('HTTP/1.0 401 Unauthorized');
-			$result['message'] = 'Invalid token!';
-			return $result;			
-		}
-		
-		$user=get_userdata($user_id);
-		if ( !in_array('administrator', $user->roles ) ){
-			$result['message'] = 'You can not create user.';
-			return $result;	
-		}
-		// end validate user has the right to create new user
-		
-		// check required parameters		
-		if ( !isset($_POST['email']) ){			
-			$result['message'] = 'Email not found';
-			return $result;
-		}
-		if ( !isset($_POST['password']) ){			
-			$result['message'] = 'Password not found';
-			return $result;
-		}
-		// end check required parameters
-		
-		
-		// validate password
-		$password = sanitize_text_field($_POST['password']);
-		$valid = $this->validatePassword( $password );			
-		if ( $valid !== true ){
-			$result['message'] = $valid;
-			return $result;	
-		}
-		
-		
-		// validate email
-		$email = sanitize_text_field($_POST['email']);
-		if ( !is_email($email) ){
-			$result['message'] = 'Email address not correct!';
-			return $result;
-		}
-		if (email_exists($email)){
-			$result['message'] = 'Email already exists!';
-			return $result;
-		}
-		
-		
-		// validate user name
-		$user_name = explode('@', $email)[0];		
-		if (isset($_POST['username'])){
-			$user_name = sanitize_text_field($_POST['username']);
-		}
-		
-		$user_id = username_exists( $user_name ); //(int|false) The user's ID on success, and false on failure.
-		
-		if ( $user_id !== false ){
-			$result['message'] = 'User '.$user_name.' already exists!';
-			return $result;
-		}
-		
-		$result['success'] = true;
-		return $result;		
-	}
-	
-	
-	/*
-	** User Create(For admin only.) 
+	** User register 
 	**		Method: POST
-	**		Url: /garfield/api/user/create
-	**		Post data:
-	**		  token: string required (get it from user login response)
-	**		  email -  string required
-	**		  password -  string required ( Password must be alphanumeric and contains minimum 6 characters. This condition can discuss to change during development. )
-	**		  username -  string (optional, if provided, will check the existing, if not provided, will use email before @ string to validate user name)
-	**		  roles: string optional ( Role name. If more than one, separated by comma. Default: no role. )
+	**		Url: /OX/api/user/register
+	**		Post data:	**		 
+	**		  authorize -  string required (base64 encoded email:password)
+	**		  first_name -  string optional
+	**		  last_name - string optional
 	**		Response:
 	**		  success:  true or false
 	**		  message: String
-	**		  source: String
-	**		  user: null or user object 
 	**
 	*/		
-	private function user_create(){
+	private function user_register(){
 		
-		$result = array(
-			'success'=> false,
-			'message'=>'',
-			'source'=> $this->getSource(),	
-			'user' => null
-		);
-		
-		// validate user has the right to create new user
-		$user_id= $this->validateToken();
-		if ($user_id==false){
-			header('HTTP/1.0 401 Unauthorized');
-			$result['message'] = 'Invalid token!';
-			return $result;			
-		}
-		
-		$admin=get_userdata($user_id);
-		if ( !in_array('administrator', $admin->roles ) ){
-			$result['message'] = 'You can not create user.';
-			return $result;	
-		}
-		// end validate user has the right to create new user
-		
-		
-		// check required parameters		
-		if ( !isset($_POST['email']) || empty($_POST['email']) ){			
-			$result['message'] = 'Email is not found';
-			return $result;
-		}
-		
-		if ( !isset($_POST['password']) || empty($_POST['password']) ){			
-			$result['message'] = 'Password is not found';
-			return $result;
-		}		
-		// end check required parameters
-		
-		
-		// check optional parameters
-		$roles = array();
-		if ( isset($_POST['roles']) && !empty($_POST['roles']) ){			
-			$roles = explode(',', $_POST['roles']);
-		}			
-		// end check optional parameters
-		
-		
-		
-		$email = sanitize_text_field($_POST['email']);
-		$password = sanitize_text_field($_POST['password']);
-		
-		// get user name
-		if (isset($_POST['username']) && !empty($_POST['username']) ){
-			$user_name = sanitize_text_field($_POST['username']);
-		}
-		else {
-			$user_name = explode('@', $email)[0];
-		}
-		
-		$new_user_id = wp_create_user( $user_name, $password, $email );//When successful returns the user ID,In case of failure (username or email already exists) the function returns an error object;
-		
-		if (is_wp_error($new_user_id)){
-			$result['message'] = $new_user_id->get_error_message();
-			return $result;
-		}
-		
-		
-		$new_user = get_user_by('id', $new_user_id);
-		
-		// set user roles
-		$new_user->set_role(''); //This will remove the previous roles of the user and assign the user the new one. You can set the role to an empty string and it will remove all of the roles from the user.
-		foreach ($roles as $role) {
-			$new_user->add_role($role); 
-		}
-		
-		$new_user_data  = get_userdata( $new_user_id );
-		$centra_user = new AIT_CENTRA_USER;
-		$centra_user->setUser($new_user_data);	
-		$result['user'] = $centra_user;
-		$result['success'] = true;		
-		
-		return $result;
+		return (new ANTIQUES_USER())->register($_POST);
 		
 	}
 	
-	
-	/*
-	** User Update (For admin only.) 
-	**		Method: POST
-	**		Url: /garfield/api/user/update
-	**		Post data:
-	**		  token: string required (get it from user login response)
-	**		  user_id: int required ( If empty or not set or <=0, will return false. )	
-	**		  roles: string optional ( Role name. If more than one, separated by comma. Default: no role. )
-	**		Response:
-	**		  success:  true or false
-	**		  message: String
-	**		  source: String
-	**		  user: null or user object 
-	**
-	*/		
-	private function user_update(){
-		
-		$result = array(
-			'success'=> false,
-			'message'=>'',
-			'source'=> $this->getSource(),	
-			'user' => null
-		);
-		
-		// validate user has the right to create new user
-		$user_id= $this->validateToken();
-		if ($user_id==false){
-			header('HTTP/1.0 401 Unauthorized');
-			$result['message'] = 'Invalid token!';
-			return $result;			
-		}
-		
-		$admin=get_userdata($user_id);
-		if ( !in_array('administrator', $admin->roles ) ){
-			$result['message'] = 'You can not update user.';
-			return $result;	
-		}
-		// end validate user has the right to create new user
-		
-		
-		// check required parameters		
-		if ( !isset($_POST['user_id']) || !is_numeric($_POST['user_id']) || (int)$_POST['user_id'] <= 0 ){			
-			$result['message'] = 'User ID invalid!';
-			return $result;
-		}				
-		// end check required parameters
-		
-		
-		// check optional parameters
-		$roles = array();
-		if ( isset($_POST['roles']) && !empty($_POST['roles']) ){			
-			$roles = explode(',', $_POST['roles']);
-		}			
-		// end check optional parameters		
-		
-		$update_user_id = (int)$_POST['user_id'];
-		$update_user = new WP_User( $update_user_id );
-
-		if ( ! $update_user->exists() ) {
-            $result['message'] = 'User with ID '.$update_user_id.' is not existed!';
-			return $result;
-        }
-
-		
-		// set user roles
-		$update_user->set_role(''); //This will remove the previous roles of the user and assign the user the new one. You can set the role to an empty string and it will remove all of the roles from the user.
-		foreach ($roles as $role) {
-			$update_user->add_role($role); 
-		}
-		
-		$user_data  = get_userdata( $update_user_id );
-		$centra_user = new AIT_CENTRA_USER;
-		$centra_user->setUser($user_data);	
-		$result['user'] = $centra_user;
-		$result['success'] = true;		
-		
-		return $result;
-		
-	}
-	
-	
-	/*
-	** User Delete (For admin only.) 
-	**		Method: POST
-	**		Url: /garfield/api/user/update
-	**		Post data:
-	**		  token: string required (get it from user login response)
-	**		  user_id: int required ( If empty or not set or <=0, will return false. )		**		  
-	**		Response:
-	**		  success:  true or false
-	**		  message: String
-	**		  source: String	
-	**
-	*/	
-	private function user_delete(){
-		
-		$result = array(
-			'success'=> false,
-			'message'=>'',
-			'source'=> $this->getSource(),				
-		);
-		
-		// validate user has the right to create new user
-		$user_id= $this->validateToken();
-		if ($user_id==false){
-			header('HTTP/1.0 401 Unauthorized');
-			$result['message'] = 'Invalid token!';
-			return $result;			
-		}
-		
-		$admin=get_userdata($user_id);
-		if ( !in_array('administrator', $admin->roles ) ){
-			$result['message'] = 'You can not update user.';
-			return $result;	
-		}
-		// end validate user has the right to create new user
-		
-		
-		// check required parameters		
-		if ( !isset($_POST['user_id']) || !is_numeric($_POST['user_id']) || (int)$_POST['user_id'] <= 0 ){			
-			$result['message'] = 'User ID invalid!';
-			return $result;
-		}				
-		// end check required parameters
-		$delete_user_id = (int)$_POST['user_id'];
-		
-		
-		// check optional parameters
-		$reassign_id = null;
-		if ( isset($_POST['reassign_id']) && !empty($_POST['reassign_id']) ){			
-			$reassign_id = trim($_POST['reassign_id']);
-		}			
-		// end check optional parameters		
-		
-		
-		
-		// validate delete user account		
-		$delete_user = new WP_User( $delete_user_id );
-
-		if ( ! $delete_user->exists() ) {
-            $result['message'] = 'User with ID '.$delete_user_id.' is not existed!';
-			return $result;
-        }
-		
-		// delete user
-		require_once(ABSPATH.'wp-admin/includes/user.php' );
-		if ( $reassign_id != null ){
-			
-			// validate reassign user account
-			$reassign_user = new WP_User( $reassign_id ); 		
-			if ( ! $reassign_user->exists() ){
-				$result['message'] = 'Reassign user with ID '.$reassign_id .' is not existed!';
-				return $result;
-			}
-			
-			$result['success'] = wp_delete_user( $delete_user_id, $reassign_id );//True when finished.
-		}
-		else{
-			
-			$result['success'] = wp_delete_user( $delete_user_id );		
-		}
-		// end delete user
-		
-		
-		// clear user tokens
-		if ( $result['success'] === true ){
-			
-			$member_mapping = get_option( 'bp_centralized_member_mapping', array() ); //(mixed) Value set for the option.		
-			$member_mapping_updated = array();
-			
-			foreach ($member_mapping as $token => $member){
-				
-				if ( $member['id'] != $delete_user_id ){
-					$member_mapping_updated[$token] = $member;
-				}
-			}			
-			
-			// update mapping
-			if (!update_option( 'bp_centralized_member_mapping', $member_mapping_updated )){		
-				add_option( 'bp_centralized_member_mapping', $member_mapping_updated );
-			}
-			
-		}
-		//$result['member_mapping'] = get_option( 'bp_centralized_member_mapping', array());
-		return $result;
-		
-	}
-	
-	
-	/*
-	** List users: For admin only.
-	**
-	** $_Post data:
-	**   paged: int optional ( default 1. )
-	** 	 num_per_page: int optional ( default 10. )
-	**   role_in: string optional ( Role name. If more than one, separated by comma. ) Example: “author,editor,principleeditor”
-	**   search: int or string optional ( Can be user id, username, display name, or email. If not set, will be ignored. )
-	**   search_columns: string optional ( Work with search parameter. 
-	**                   Value can be any of these: 'ID','user_login', 'user_email', 'display_name' or 'user_nicename'. 
-	**                   If more than one, separated by comma. 'user_login' means username. )  
-	**                   Example: 'user_login,user_email'  
-	**   
-	** @return result array.
-	*/
-	private function user_list(){
-		
-		$result = array(
-			'success'=> false,
-			'message'=>'',
-			'paged' => 1,
-			'num_per_page' => 10,
-			'total'=> 0,
-			'source'=> $this->getSource(),		
-			'users' => array(),
-		);
-		
-		// validate user has the right to create new user
-		$user_id= $this->validateToken();
-		if ($user_id==false){
-			header('HTTP/1.0 401 Unauthorized');
-			$result['message'] = 'Invalid token!';
-			return $result;			
-		}
-		
-		$user=get_userdata($user_id);
-		if ( !in_array('administrator', $user->roles ) ){
-			$result['message'] = 'You can not see other users.';
-			return $result;	
-		}
-		
-				
-		if ( isset($_POST['paged']) && is_numeric($_POST['paged']) ){
-			$paged = (int) $_POST['paged'];
-			if ($paged < 1){
-				$paged = 1;
-			}
-			$result['paged'] = $paged;			
-		}
-		
-		if ( isset($_POST['num_per_page']) && is_numeric($_POST['num_per_page']) ){
-			$num_per_page = (int) $_POST['num_per_page'];
-			if ($num_per_page < 0){
-				$num_per_page = 10;
-			}
-			$result['num_per_page'] = $num_per_page;			
-		}
-				
-		$args = array(			
-			'number' => $result['num_per_page'],
-            'paged'  => $result['paged'],
-		);
-		
-		if ( isset($_POST['role_in']) && !empty($_POST['role_in']) ){
-			$role_in = trim($_POST['role_in']);			
-			$args['role__in'] = explode(',', $role_in);			
-		}
-		
-		if ( isset($_POST['search']) && !empty($_POST['search']) ){	
-			
-			$args['search'] = trim($_POST['search']);	
-			
-			if ( isset($_POST['search_columns']) && !empty($_POST['search_columns']) ){				
-				$args['search_columns'] = explode(',', $_POST['search_columns']);			
-			}
-		}
-
-		
-		$user_query = new WP_User_Query( $args ); // return (array) List of users.
-		
-		$users_data=$user_query->get_results();
-		// User Loop
-		if ( ! empty( $users_data ) ) {
-			
-			$result['total'] = $user_query->get_total();
-			foreach ( $users_data as $user_data ) {
-				
-				$centra_user = new AIT_CENTRA_USER;
-				$centra_user->setUser($user_data);	
-				$result['users'][] = $centra_user;
-			}
-			
-		} else {
-			//echo 'No users found.';
-		}
-		
-		$result['success'] = true;
-		return $result;
-	
-	}
-
-
-	/*
-	** get user recent selected categories
-	*/
-	private function user_selected_categories()
-	{
-		$result = array(
-			'success' => false,
-			'message' => '',
-			'source' => $this->getSource(),
-			'categories' => array(),
-		);
-
-		// validate user has the right to create new user
-		$user_id = $this->validateToken();
-		if ($user_id == false) {
-			header('HTTP/1.0 401 Unauthorized');
-			$result['message'] = 'Invalid token!';
-			return $result;
-		}
-
-		$result['categories'] = $this->get_user_selected_categories($user_id);
-		$result['success'] = true;
-		return $result;
-	}
-
-	private function get_user_selected_categories($user_id)
-	{
-		$user_meta = get_user_meta($user_id, 'cms_selected_categories', true);
-		return empty($user_meta) ? array() : json_decode($user_meta);
-	}
-
-	/*
-	** insert user recent selected category
-	*/
-	private function user_select_category()
-	{
-		$result = array(
-			'success' => false,
-			'message' => '',
-			'source' => $this->getSource(),
-			'categories' => array(),
-		);
-
-		// validate user has the right to create new user
-		$user_id = $this->validateToken();
-		if ($user_id == false) {
-			header('HTTP/1.0 401 Unauthorized');
-			$result['message'] = 'Invalid token!';
-			return $result;
-		}
-
-		$categories = $this->get_user_selected_categories($user_id);
-		if (!empty($_POST['id'])) {
-			$cate_id = intval($_POST['id']);
-			$new_categories = array_filter($categories, function ($item) use ($cate_id) {
-				return $item != $cate_id;
-			});
-			array_unshift($new_categories, $cate_id);
-
-			if ($categories !== $new_categories) {
-				$categories = $new_categories;
-				$updated = update_user_meta($user_id, 'cms_selected_categories', json_encode($categories));
-				if ($updated === false) {
-					$result['message'] = 'Error on updating user recent selected categories!';
-					return $result;
-				}
-			}
-		}
-
-		$result['categories'] = $categories;
-		$result['success'] = true;
-		return $result;
-	}
-
-	/*
-	** get user recent selected authors
-	*/
-	private function user_selected_authors()
-	{
-		$result = array(
-			'success' => false,
-			'message' => '',
-			'source' => $this->getSource(),
-			'authors' => array(),
-		);
-
-		// validate user has the right to create new user
-		$user_id = $this->validateToken();
-		if ($user_id == false) {
-			header('HTTP/1.0 401 Unauthorized');
-			$result['message'] = 'Invalid token!';
-			return $result;
-		}
-
-		$result['authors'] = $this->get_user_selected_authors($user_id);
-		$result['success'] = true;
-		return $result;
-	}
-
-	private function get_user_selected_authors($user_id)
-	{
-		$user_meta = get_user_meta($user_id, 'cms_selected_authors', true);
-		return empty($user_meta) ? array() : json_decode($user_meta);
-	}
-
-	/*
-	** insert user recent selected author
-	*/
-	private function user_select_author()
-	{
-		$result = array(
-			'success' => false,
-			'message' => '',
-			'source' => $this->getSource(),
-			'authors' => array(),
-		);
-
-		// validate user has the right to create new user
-		$user_id = $this->validateToken();
-		if ($user_id == false) {
-			header('HTTP/1.0 401 Unauthorized');
-			$result['message'] = 'Invalid token!';
-			return $result;
-		}
-
-		$authors = $this->get_user_selected_authors($user_id);
-		if (!empty($_POST['id'])) {
-			$author_id = intval($_POST['id']);
-			$new_authors = array_filter($authors, function ($item) use ($author_id) {
-				return $item != $author_id;
-			});
-			array_unshift($new_authors, $author_id);
-
-			if ($authors !== $new_authors) {
-				$authors = $new_authors;
-				$updated = update_user_meta($user_id, 'cms_selected_authors', json_encode($authors));
-				if ($updated === false) {
-					$result['message'] = 'Error on updating user recent selected authors!';
-					return $result;
-				}
-			}
-		}
-
-		$result['authors'] = $authors;
-		$result['success'] = true;
-		return $result;
-	}
-
 
 	/*
 	** list posts sort by categories	
