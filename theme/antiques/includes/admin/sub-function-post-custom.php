@@ -35,6 +35,30 @@ function register_custom_antiques() {
 	
 	
 	$labels = array(
+		"name" => "分类",
+		"label" => "分类",
+		"menu_name" => "分类",
+		"all_items" => "所有分类",
+		"edit_item" => "编辑分类",
+		"add_new_item" => "新分类",
+		"search_items" => "搜索分类",
+		"view_item" => "查看分类",
+		);
+
+	$args = array(
+		"labels" => $labels,
+		"hierarchical" => true,
+		"label" => "分类",
+		"show_ui" => true,
+		"show_in_nav_menus" => false,
+		"query_var" => true,
+		"rewrite" => array( 'slug' => 'antique_cat', 'with_front' => true ),
+		"show_admin_column" => true,		
+	);
+	register_taxonomy( "antique_cat", array( "antique" ), $args );
+	
+	
+	$labels = array(
 		"name" => "推荐",
 		"label" => "推荐",
 		"menu_name" => "推荐",

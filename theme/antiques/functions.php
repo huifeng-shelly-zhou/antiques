@@ -13,6 +13,11 @@ if (file_exists( dirname(__FILE__) .'/includes/admin/sub-functions.php')) {
 	require_once ('includes/admin/sub-functions.php');
 }
 
+//Emails functions
+if (file_exists( dirname(__FILE__) .'/includes/admin/sub-functions-emails.php')) {
+	require_once ('includes/admin/sub-functions-emails.php');
+}
+
 
 //Making jQuery Google API
 function modify_jquery() {
@@ -23,7 +28,7 @@ function modify_jquery() {
 		wp_enqueue_script('jquery');
 	}
 }
-add_action('init', 'modify_jquery');
+//add_action('init', 'modify_jquery');
 
 
 add_action( 'wp_enqueue_scripts', 'add_theme_scripts' );

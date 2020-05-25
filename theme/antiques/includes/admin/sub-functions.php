@@ -64,4 +64,13 @@ function remove_antique_gallery_images_id($antique_id, $attachment_id){
 	set_antique_gallery_images_ids($gallery_image_ids);
 }
 
+
+function validate_password($pw){
+	
+	if ($pw == null || empty($wp) || strlen($pw) < 8){
+		return '密码需多于八个字符!';
+	}
+	
+	return true;
+}
 ?>
