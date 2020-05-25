@@ -20,9 +20,9 @@ function emailNewAccount($user_id){
 	$expiration = $myDate->format( DateTime::ATOM ); 
 	$key = wp_generate_password( 40, false );		
 	
-	update_user_meta($user_id, '_antiques_email_verify_key', array('key'=>$key, 'expiration'=>$expiration));
+	add_user_meta($user_id, '_antiques_email_verify_key', array('key'=>$key, 'expiration'=>$expiration), true);
 	
-	$verify_link = get_home_url().'/login/?action=verify_account&user_login='.$user_login.'&key='.$key;
+	$verify_link = get_home_url().'/login/?action=verify_account&user_login='.base64_encode($user_login).'&key='.$key;
 	
 	// get email html content
 	$template = ABSPATH . 'wp-content/themes/antiques/templates/email_new_account.html';
@@ -68,7 +68,8 @@ function resendVerification($email){
 		$user_login = stripslashes($user->user_login);
 		$user_display_name = $user->data->display_name;
 		$user_email = $user->user_email;
-		$subject = 'New verification key';
+		$site_name = get_bloginfo( 'name' );
+		$subject = '新验证码';
 		$headers = array();
 		$headers[] = "Content-Type: text/html; charset=UTF-8";			
 		
@@ -81,7 +82,7 @@ function resendVerification($email){
 		update_user_meta($user->ID, '_antiques_email_verify_key', array('key'=>$key, 'expiration'=>$expiration));
 	
 		
-		$verify_link = $shop_domain.'/login/?action=verify_account&user_login='.$user_login.'&key='.$key;
+		$verify_link = get_home_url().'/login/?action=verify_account&user_login='.base64_encode($user_login).'&key='.$key;
 		
 		// get email html content
 		$body = file_get_contents($template);
@@ -97,6 +98,33 @@ function resendVerification($email){
 	}
 	
 	return false;	
+}
+
+function sendNewPwToUser($name, $email, $pw){
+	
+	$template = ABSPATH . 'wp-content/themes/antiques/templates/email_new_password.html';
+	if (file_exists($template)){		
+		
+		$site_name = get_bloginfo( 'name' );
+		$subject = "重置密码成功";
+		$headers = array();
+		$headers[] = "Content-Type: text/html; charset=UTF-8";		
+		
+		// get email html content
+		$body = file_get_contents($template);
+		// set user name
+		$body = str_replace('[username]',$name, $body);
+		// set verify link	
+		$body = str_replace('[email]',$email, $body);
+		// set site name	
+		$body = str_replace('[site_name]', $site_name, $body);
+		
+		
+		return wp_mail($email,$subject, $body, $headers);//Returns (bool) Whether the email contents were sent successfully.
+	}
+	
+	return false;
+	
 }
 
 ?>

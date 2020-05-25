@@ -12,12 +12,19 @@ class ANTIQUES_APIS {
 	private $version;
 	private $controllers;
 	
+	private $user;
+	
+	private $error_response = array('success'=>false);
+	
 	public function __construct( $config = array() )
 	{
 		
 		$this->load_dependencies();
 		$this->init_hooks();
 		
+		if (class_exists('ANTIQUES_USER')){
+			$this->user = new ANTIQUES_USER();
+		}		
 		
 	} // __construct
 	
@@ -99,7 +106,7 @@ class ANTIQUES_APIS {
 		
 		// validate key and secret
 		$headers = $this->parseRequestHeaders();
-		if($headers["Key"] != $API_KEY || $headers["Secret"] != $API_SECRET)
+		if(!isset($headers["Key"]) || $headers["Key"] != $API_KEY || $headers["Secret"] != $API_SECRET)
 		{
 			$arr = array('success'=> false,'message'=>'Incorrect key and secret pair.');
 			die( json_encode($arr) );
@@ -140,28 +147,6 @@ class ANTIQUES_APIS {
 		}
 		return $headers;
 	}
-		
-
-	private function savePostAutoSetting( $post, $auto_social_share, $auto_facebook_post ) {	
-		if ( !is_a($post, 'WP_Post') ){
-			return;
-		}
-		
-		if ( isset( $auto_social_share ) ) {
-			if ( ($auto_social_share === true || $auto_social_share == 'true' || $auto_social_share == '1') ) {
-				update_post_meta( $post->ID, '_auto_social_share', 'pending_social_share' );
-			} else if ( metadata_exists( $post->post_type, $post->ID, '_auto_social_share' ) ) {
-				delete_post_meta( $post->ID, '_auto_social_share' );	
-			}
-		}
-		
-		if ( $post->post_status == 'publish' && isset( $auto_facebook_post ) && ($auto_facebook_post === true || $auto_facebook_post == 'true' || $auto_facebook_post == '1') ) {
-			update_post_meta( $post->ID, '_auto_facebook_post', 'pending_facebook_post' );			
-		}
-		else if ( metadata_exists( $post->post_type, $post->ID, '_auto_facebook_post' ) ) {
-			delete_post_meta( $post->ID, '_auto_facebook_post' );
-		}		
-	}
 	
 	private function updatePostCategories( $post_id, $ids ) {	
 		
@@ -185,507 +170,98 @@ class ANTIQUES_APIS {
 		
 		return true;
 		
-	}
-	
-	private function updatePostTags( $post_id, $tags ) {	
-		
-		if ( !empty($tags) ){
-			$tag_ids = wp_set_post_terms($post_id, $tags, 'post_tag');
-			if ( !is_array($tag_ids) ){				
-				return false;
-			}
-		}
-		else{
-			$post_tags = get_the_tags($post_id);
-			if ($post_tags){
-				foreach ( $post_tags as $tag ){
-					$updated = wp_remove_object_terms( $post_id, $tag->slug, 'post_tag' );//(bool|WP_Error) True on success, false or WP_Error on failure.
-					if ( !$updated ){
-						return false;
-					}
-				}
-			}			
-		}
-		
-		return true;
-		
-	}
+	}	
 
-	private function updatePostSeoTags( $post_id, $seo_tags ) {		
-		
-		if ( !empty($seo_tags) && taxonomy_exists( 'seo_tag' ) ){
-			$tag_ids = wp_set_post_terms($post_id, $seo_tags, 'seo_tag'); //(array|boolean|WP_Error|string) 
-			
-			if ( is_wp_error($tag_ids) ){				
-				return $tag_ids->get_error_message();
-			}
-		}
-		else if ( empty($seo_tags) && taxonomy_exists( 'seo_tag' ) ) {
-			
-			$tags =  wp_get_post_terms( $post_id, 'seo_tag');//(array|WP_Error) Array of WP_Term objects on success or empty array if no terms were found. WP_Error object if $taxonomy doesn't exist.
-			
-			if ( is_wp_error($tags) ){				
-				return $tags->get_error_message();
-			}
-			
-			if ( !is_wp_error($tags) ){
-				foreach ($tags as $tag){
-					
-					if ( is_a($tag, 'WP_Term') ){
-						$updated = wp_remove_object_terms( $post_id, $tag->slug, 'seo_tag' );//(bool|WP_Error) True on success, false or WP_Error on failure.
-						if ( !$updated ){
-							return 'Error on clear seo tag: '.$tag;
-						}
-					}
-				}
-			}	
-		}
-		else if ( !empty($seo_tags) && !taxonomy_exists( 'seo_tag' ) ){
-			return 'seo_tag taxonomy not exists to set post tag: '. $seo_tags;
-		}
-		
-		return true;
-		
-	}
-	
-	private function updatePostHighlighted( $post_id, $value ) {		
-		
-		$highlighted_slugs = array();
-		$highlight_option = array();
-		
-		if ( !empty($value) ){
-			$value = str_replace('\\','',$value);
-			$items = json_decode($value,TRUE);			
-			
-			if ( isset($items) && is_array($items) ){				
-				
-				// validate term and find out term infomation
-				foreach ($items as $item) {				
-					
-					if (isset($item['slug'])){
-						
-						$term = get_term_by( 'slug', $item['slug'], 'highlight_option');
-						
-						if ( is_a($term, 'WP_Term') ){
-							
-							$highlighted_slugs[] = $term->slug;
-							
-							if ( isset($item['term_order']) ){
-								$term_order = (int)$item['term_order'];
-							}
-							else {
-								$term_order = -1;
-							}
-							
-							$highlight_option[] = array(
-								'term_order' => $term_order,
-								'term_taxonomy_id' => $term->term_taxonomy_id
-							);
-						}
-						else {
-							// not found the term
-							return 'Term is not found the term for slug '.$item['slug'];
-						}						
-					}
-					else{
-						// slug not found
-						return 'slug not found';
-					}					
-				}// end foreach loop				
-			}
-			else{
-				// json_decode error
-				return 'json_decode error';
-			}			
-		}
-		
-		
-		if ( count($highlighted_slugs) == 0 && taxonomy_exists( 'highlight_option' ) ){
-			
-			// to clear or remove all terms from an object, pass an empty string or NULL.
-			$term_taxonomy_ids = wp_set_object_terms( $post_id, NULL, 'highlight_option' );
-			if ( is_wp_error( $term_taxonomy_ids ) ) {
-				return $term_taxonomy_ids->get_error_message();
-			} 
-			
-		}
-		else if ( count($highlighted_slugs) > 0 && taxonomy_exists( 'highlight_option' ) ){
-			
-			// update posts hightlighted options
-			$term_taxonomy_ids = wp_set_object_terms( $post_id, $highlighted_slugs, 'highlight_option' );
-			
-			if ( is_wp_error( $term_taxonomy_ids ) ) {
-				return $term_taxonomy_ids->get_error_message();;
-			} 			
-			
-			// update term order
-			foreach ($highlight_option as $highlighted){
-				$updated = $this->setTaxonomyTermTermOrder( $highlighted['term_order'], $post_id, $highlighted['term_taxonomy_id'] );	
-				if ($updated === false){
-					return 'Update term order fail!';
-				}				
-			}
-			// end update term order
-			
-		}
-		else if ( count($highlighted_slugs) > 0 && !taxonomy_exists( 'highlight_option' ) ){
-			// highlight_option taxonomy not exists
-			return 'highlight_option taxonomy not exists to set post option';
-		}	
-		
-		return true;
-		
-	}
-	
-	private function setTaxonomyTermTermOrder( $term_order, $object_id, $tt_id ) {
-		global $wpdb;
-		return $wpdb->query( $wpdb->prepare(
-				"
-				UPDATE $wpdb->term_relationships
-				SET term_order = %d
-				WHERE object_id = %d
-				AND term_taxonomy_id = %d
-				",
-				$term_order,
-				$object_id,
-				$tt_id
-		) );
-	}
-
-	private function setPostEditLock($post_id, $user_id){
-		if ( ! $post = get_post( $post_id ) ) {
-			return false;
-		}
-		
-		$now  = time();
-		$lock = "$now:$user_id";
-		update_post_meta( $post_id, '_edit_lock', $lock );
-		
-		return array( $now, $user_id );
-	}
-	
 
 	/*
 	** User Login 		
 	**	 Url: /OX/api/user/login
 	**	 Post data:
-	**	   username  -  string required
-	**	   password -  string required
+	**	   authorize  -  string required, base64 {email:password}
 	**	 Response:
 	**	   success:  true or false
 	**	   message: String
-	**	   source: String
+	**	   resend_link: String
 	**	   user: null or user object as following
 	**
 	*/
 	private function user_login(){
-				
-		return (new ANTIQUES_USER())->login($_POST);
+		
+		if ( isset($this->user) ){
+			return $this->user->login($_POST);
+		}
+		return $this->error_response;
 	}
 
 	
 	/*
-	** User verify (verify user membership)
+	** User validate (validate user membership)
 	** 		Method: POST
-	** 		Url: /garfield/api/user/verify
-	** 		Post data:
-	** 		  username -  string required
-	** 		  email -  string required
-	** 		  password -  string required
+	** 		Url: /OX/api/user/validate
+	** 		Post data: 		  
 	** 		  token: string required (get it from user login response)
-	** 		  token_expiration: string required (get it from user login response)
 	** 		Response:
 	** 		  success:  true or false
 	** 		  message: String
-	** 		  source: String
+	** 		  display_name: String
 	** 
 	*/
-	private function user_verify(){
+	private function user_validate(){
 		
-		$result = array(
-			'success'=> false,
-			'message'=>'',
-			'source'=> $this->getSource(),
-		);
-		
-		// check required parameters
-		if ( !isset($_POST['username']) ){			
-			$result['message'] = 'User name not found!';
-			return $result;
+		if ( isset($this->user) ){
+			return $this->user->validate($_POST);	
 		}
-		
-		if ( !isset($_POST['email']) ){			
-			$result['message'] = 'Email not found!';
-			return $result;
-		}
-		
-		if ( !isset($_POST['password']) ){			
-			$result['message'] = 'Password not found!';
-			return $result;
-		}
-		
-		if ( !isset($_POST['token']) ){			
-			$result['message'] = 'Token not found!';
-			return $result;
-		}
-		
-		if ( !isset($_POST['token_expiration']) ){			
-			$result['message'] = 'Token expiration not found!';
-			return $result;
-		}
-		// end check required parameters
-		
-		$username = trim($_POST['username']);
-		$email = trim($_POST['email']);
-		$password = trim($_POST['password']);
-		$token = trim($_POST['token']);
-		$token_expiration = trim($_POST['token_expiration']);
-		
-		
-		if ( !email_exists($email)){
-			// email not exist
-			$result['message'] = 'Email not exists!';
-			return $result;
-		}
-		
-		$user = wp_authenticate( $username, $password ); 
-		
-		if ( is_wp_error( $user ) ) {
-			// login fail
-			$result['message'] = $user->get_error_message();
-			return $result;
-		}
-		
-		$centra_user = new AIT_CENTRA_USER;
-		$centra_user->setUser($user);		
-		
-		
-		if ($centra_user->user_email != $email){
-			// not match email
-			$result['message'] = 'User email not matched!';
-			return $result;			
-		}
-		
-		// verify user success		
-		$result['success'] = true;		
-		
-		// update user token
-		$this->updateToken($centra_user->id, $token, $token_expiration);
-			
-		return $result;
-		
+		return $this->error_response;	
 	}
 	
 	
 	/*
 	** User Profile 
 	** 		Method: POST
-	** 		Url: /garfield/api/user/profile
+	** 		Url: /OX/api/user/profile
 	** 		Post data:
 	** 		  token: string required (get it from user login response)
 	** 		Response:
 	** 		  success:  true or false
 	** 		  message: String
-	** 		  source: String
 	** 		  user: null or user object 
 	** 
 	*/
 	private function user_profile(){
 		
-		$result = array(
-			'success'=> false,
-			'message'=>'',			
-			'source'=> $this->getSource(),		
-			'user' => null
-		);
-		
-		
-		// validate user has the right to create new user
-		$user_id= $this->validateToken();
-		if ($user_id==false){
-			header('HTTP/1.0 401 Unauthorized');
-			$result['message'] = 'Invalid token!';
-			return $result;			
+		if ( isset($this->user) ){
+			return $this->user->profile($_POST);	
 		}
-				
-		$user = get_userdata( $user_id );
-		
-		if ( is_wp_error( $user ) ) {
-			$result['message'] = $user->get_error_message();
-			return $result;
-		}
-				
-		
-		$centra_user = new AIT_CENTRA_USER;
-		$centra_user->setUser($user);
-		$centra_user->user_url = $user->data->user_url;		
-		$centra_user->user_registered = $user->data->user_registered;	
-		$centra_user->description = get_user_meta($user_id, 'description', true);
-		
-		//$result['wp_user'] = $user;
-		$result['success'] = true;
-		$result['user'] = $centra_user;
-		return $result;
-		
+		return $this->error_response;	
 	}
 	
 	
 	/*
 	** User Profile Update (For user’s owned profile.)
 	** 		Method: POST
-	** 		Url: /garfield/api/user/profile/update
+	** 		Url: /OX/api/user/profile/update
 	** 		Post data:
 	** 		  token: string required (get it from user login response)
 	** 		  email: string required ( If empty or not set, will return false. )
-	** 		  display_name: string required ( If empty or not set, will return false. )
+	** 		  display_name: string optional ( If empty or not set, will return false. )
 	** 		  first_name: string optional ( If empty or not set, will set value to empty string. )
 	** 		  last_name: string optional ( If empty or not set, will set value to empty string. )
-	** 		  user_url: string optional ( If empty or not set, will set value to empty string. )
 	** 		  description: string optional ( If empty or not set, will set value to empty string. )
-	** 		  new_password: string optional (If empty or not set, will be ignored. Password must be alphanumeric and contains minimum 6 characters. This condition can discuss to change during development. )
+	** 		  new_password: string optional base64 encode (If empty or not set, will be ignored. Password must be minimum 8 characters.)
 	** 		Response:
 	** 		  success:  true or false
 	** 		  message: String
-	** 		  source: String
 	** 		  user: null or user object 
 	** 
 	*/
 	private function user_profile_update(){
 		
-		$result = array(
-			'success'=> false,
-			'message'=>'',
-			'source'=> $this->getSource(),		
-			'user' => null
-		);
-		
-		
-		// validate user has the right to create new user
-		$user_id= $this->validateToken();
-		if ($user_id==false){
-			header('HTTP/1.0 401 Unauthorized');
-			$result['message'] = 'Invalid token!';
-			return $result;			
+		if ( isset($this->user) ){
+			return $this->user->profile_update($_POST);	
 		}
-		
-		$user = new WP_User( $user_id );
-
-		if ( ! $user->exists() ) {
-            $result['message'] = 'User with ID '.$user_id.' is not existed!';
-			return $result;
-        }
-		
-		
-		// check required parameters
-		if ( !isset($_POST['email']) || !is_email($_POST['email']) ){			
-			$result['message'] = 'Invalid user email!';
-			return $result;
-		}
-		$user->user_email = trim($_POST['email']);
-		
-		if ( !isset($_POST['display_name']) || empty($_POST['display_name']) ){			
-			$result['message'] = 'Display name is required!';
-			return $result;			
-		}
-		$user->data->display_name = sanitize_text_field($_POST['display_name']);
-		// end check required parameters
-		
-		
-		// check optional parameters
-		if ( isset($_POST['first_name']) ){			
-			$user->first_name = sanitize_text_field($_POST['first_name']);
-		}
-		else{
-			$user->first_name = '';
-		}
-		
-		if ( isset($_POST['last_name']) ){			
-			$user->last_name = sanitize_text_field($_POST['last_name']);			
-		}
-		else {
-			$user->last_name = '';
-		}
-		
-		if ( isset($_POST['user_url']) && !empty($_POST['user_url']) ){			
-			$user->data->user_url = trim($_POST['user_url']);			
-		}
-		else {
-			$user->data->user_url = '';	
-		}
-		
-		// description
-		if ( isset($_POST['description']) ){			
-			$description = sanitize_textarea_field($_POST['description']);			
-		}
-		else {
-			$description = '';
-		}				
-		$updated = update_user_meta( $user_id, 'description', $description );		
-		if ( $updated === false && $description != get_user_meta($user_id, 'description', true) ){
-			$result['message'] = 'Error on updating user description!';
-			return $result;	
-		}
-		// end description
-		
-		
-		// avatar update
-		$avatar = '';
-		if ( isset($_POST['avatar']) ){			
-			$avatar = sanitize_textarea_field($_POST['avatar']);			
-		}		
-		$avatar_updated = update_user_meta( $user_id, 'author_profile_picture', $avatar );
-		if ( $avatar_updated === false && $avatar != get_user_meta($user_id, 'author_profile_picture', true) ){
-			$result['message'] = 'Error on updating user avatar!';
-			return $result;	
-		}
-		// end avatar update
-		
-		// end check optional parameters		
-		
-		
-		$return_user_id = wp_update_user( $user );		
-		
-		if ( is_wp_error( $return_user_id ) ) {
-			// There was an error; possibly this user doesn't exist.
-			$result['message'] = $return_user_id->get_error_message();
-			return $result;			
-		}
-		
-		
-		
-		// password must be reset after user updated
-		if ( isset($_POST['new_password']) && !empty($_POST['new_password']) ){
-			
-			$new_password = trim($_POST['new_password']);
-			
-			$valid =  $this->validatePassword( $new_password );
-			
-			if ( $valid !== true ){
-				$result['message'] = $valid;
-				return $result;	
-			}			
-			
-			reset_password( $user, $new_password );
-			$result['reset_password'] = true;
-		}
-		// end password updated
-		
-		
-		$user_data = get_userdata( $return_user_id );
-		$centra_user = new AIT_CENTRA_USER;
-		$centra_user->setUser($user_data);
-		$centra_user->user_url = $user_data->data->user_url;		
-		$centra_user->user_registered = $user_data->data->user_registered;	
-		$centra_user->description = get_user_meta($user_id, 'description', true);
-		
-		//$result['wp_user'] = $user_data;
-		$result['success'] = true;
-		$result['user'] = $centra_user;
-		return $result;
-		
+		return $this->error_response;		
 	}
 	
-		
 	
 	/*
 	** User register 
@@ -702,96 +278,77 @@ class ANTIQUES_APIS {
 	*/		
 	private function user_register(){
 		
-		return (new ANTIQUES_USER())->register($_POST);
-		
+		if ( isset($this->user) ){
+			return $this->user->register($_POST);	
+		}
+		return $this->error_response;		
 	}
 	
-
+	
 	/*
-	** list posts sort by categories	
-	*/
-	private function post_list_category(){
+	** User Password Reset 
+	**		Method: POST
+	**		Url: /OX/api/user/password/reset
+	**		Post data:	**		 
+	**		  email -  string required base64 {email}
+	**		Response:
+	**		  success:  true or false
+	**		  message: String
+	**
+	*/	
+	private function user_password_reset(){
 		
-		$result = array(
-			'success'=> false,
-			'message'=>'',
-			'source'=> $this->getSource(),		
-			'items' => array(),
-		);
-		
-		
-		// validate user has the right to create new user
-		$user_id= $this->validateToken();
-		if ($user_id==false){
-			header('HTTP/1.0 401 Unauthorized');
-			$result['message'] = 'Invalid token!';
-			return $result;			
+		if ( isset($this->user) ){
+			return $this->user->password_reset($_POST);	
 		}
+		return $this->error_response;		
 		
-		
-		$is_author = false;
-		$user = get_userdata( $user_id );
-		if ( in_array( 'author', $user->roles ) ){
-			$is_author = true;
+	}//merchant_reset_password
+	
+	
+	/*
+	** User Verify Email Address 
+	**		Method: POST
+	**		Url: /OX/api/user/verify/email
+	**		Post data:	 
+	**		  user_login -  string required base64 {user_login}
+	**		  key -  string required 
+	**		  firebase_token -  string 
+	**		Response:
+	**		  success:  true or false
+	**		  message: String
+	**		  resend_link: String
+	**		  user: null or object
+	**
+	*/	
+	private function user_verify_email(){
+		if ( isset($this->user) ){
+			return $this->user->verify_email($_POST);	
 		}
-		
-		$categories = array();
-		
-		$locations = get_nav_menu_locations();
-		if (isset($locations['centrialzed'])){
-			$menu_id = $locations['centrialzed'];
-			$menu = wp_get_nav_menu_object( $menu_id );//(WP_Term|false) False if $menu param isn't supplied or term does not exist, menu object if successful.
-			if ($menu){
-				$menu_items = wp_get_nav_menu_items($menu->term_id);//(false|array) $items Array of menu items, otherwise false.
-				if ( is_array($menu_items) ){
-					
-					foreach($menu_items as $item){
-						$term = get_term($item->object_id);
-						
-						if ( is_a($term , 'WP_Term') ){							
-							$categories[] = $term;
-						}
-					}
-					
-				}
-			}
-			
-		}	
-		
-		// loop to get posts for each category, limited 3 posts
-		foreach ($categories as $cat){			
-			
-			$args = array(				
-				'numberposts' => 3,
-				'post_status' => 'any',
-				'tax_query' => array(
-					array(
-						'taxonomy' => $cat->taxonomy,
-						'field'    => 'term_id',
-						'terms'    => $cat->term_id,
-					),
-				),
-			);
-			if ( $is_author ){
-				$args['post_author'] = $user_id;
-			}
-			
-			// create centralized category object
-			$centralized_cat = new AIT_CENTRA_CATEGORY($cat);
-			
-			$posts = get_posts( $args );
-			foreach($posts as $p){
-				$central_post = new AIT_CENTRA_POST($p);
-				$central_post->find_more_options();				
-				
-				$centralized_cat->posts[] = $central_post;
-			}
-			
-			$result['items'][] = $centralized_cat;
-		}
-		$result['success'] = true;
-		return $result;	
+		return $this->error_response;	
+	
 	}
+	
+	
+	/*
+	** User Send Verification Code
+	**		Method: GET
+	**		Url: /OX/api/user/send/verification
+	**		Get data:	 
+	**		  verify -  string required base64 {user_login}	
+	**		Response:
+	**		  true or false
+	*/	
+	private function user_send_verification(){
+		
+		$email = isset($_GET['verify'])? base64_decode($_GET['verify']):'';
+		
+		if (function_exists('resendVerification')){
+			return resendVerification($email);
+		}
+		return false;
+	}
+	
 
 
 	/*
@@ -1430,53 +987,6 @@ class ANTIQUES_APIS {
 
 
 	/*
-	** single category	
-	*/
-	private function category_single(){
-		
-		$result = array(
-			'success'=> false,
-			'message'=>'',
-			'source'=> $this->getSource(),		
-			'category' => null,
-		);
-		
-		
-		// validate user has the right to create new user
-		$user_id= $this->validateToken();
-		if ($user_id==false){
-			header('HTTP/1.0 401 Unauthorized');
-			$result['message'] = 'Invalid token!';
-			return $result;			
-		}
-		
-		
-		// get required category id
-		if ( isset($_POST['category_id']) && is_numeric($_POST['category_id']) ){
-			$category_id = (int) $_POST['category_id'];
-			
-			$category = get_term($category_id);
-			
-			if (is_a($category, 'WP_Term')){				
-				$result['category']	= array(
-					'id'=>$category->term_id,
-					'name'=>$category->name,
-				);
-				$result['success'] = true;
-			}
-			else {
-				$result['message'] = 'Category not found for id '.$category_id.'!';
-			}			
-		}
-		else {
-			$result['message'] = 'Category id is required!';
-		}
-		
-		return $result;
-	}
-	
-
-	/*
 	** list all users which in role 'author', 'administrator', 'editor', 'principleeditor', 'senioreditor' 	
 	*/
 	private function author_list(){
@@ -1521,90 +1031,6 @@ class ANTIQUES_APIS {
 		
 		$result['success'] = true;
 		return $result;	
-	}
-
-
-	/*
-	** single author	
-	*/
-	private function author_single(){
-		
-		$result = array(
-			'success'=> false,
-			'message'=>'',
-			'source'=> $this->getSource(),		
-			'author' => null,
-		);
-		
-		
-		// validate user has the right to create new user
-		$user_id= $this->validateToken();
-		if ($user_id==false){
-			header('HTTP/1.0 401 Unauthorized');
-			$result['message'] = 'Invalid token!';
-			return $result;			
-		}
-		
-		
-		// get required author id
-		if ( isset($_POST['author_id']) && is_numeric($_POST['author_id']) ){
-			$author_id = (int) $_POST['author_id'];
-			
-			$author = get_userdata( $author_id );
-			
-			if (is_a($author, 'WP_User')){				
-				$result['author']	= array(
-					'id'=>$author->ID,
-					'name'=>$author->data->display_name,
-				);
-				$result['success'] = true;
-			}
-			else {
-				$result['message'] = 'Author not found for id '.$author_id.'!';
-			}			
-		}
-		else {
-			$result['message'] = 'Author id is required!';
-		}
-		
-		return $result;
-	}
-
-	/*
-	** list wp all roles and it's capabilities	
-	*/
-	private function role_list(){
-		global $wp_roles;
-		
-		$result = array(			
-			'source'=> $this->getSource(),		
-			'roles' => array()
-		);	
-		
-		// validate user has the right to create new user
-		$user_id= $this->validateToken();
-		if ($user_id==false){
-			header('HTTP/1.0 401 Unauthorized');
-			$result['message'] = 'Invalid token!';
-			return $result;			
-		}
-		
-		foreach ($wp_roles->roles as $role => $details ){
-			
-			$caps = array();
-			foreach($details['capabilities'] as $key=>$value){
-				if ($value === true){
-					$caps[] = $key;
-				}
-			}
-			
-			$result['roles'][] = array(
-				'key' => $role,
-				'name' => $details['name'],
-				'caps' => $caps
-			);
-		}
-		return $result;
 	}
 
 	
@@ -1816,542 +1242,7 @@ class ANTIQUES_APIS {
 		return $result;
 	}
 
-	/*
-	** list social media	
-	*/
-	private function social_list(){		
-		$result = array(
-			'success'=> false,
-			'message'=>'',
-			'source'=> $this->getSource(),
-			'social_media' => array(),
-		);		
-		
-		// validate user has the right to create new user
-		$user_id= $this->validateToken();
-		if ($user_id==false){
-			header('HTTP/1.0 401 Unauthorized');
-			$result['message'] = 'Invalid token!';
-			return $result;			
-		}
-		
-		
-		global  $facebook_auth, $twitter_auth, $youtube_auth;
-		
-		if (isset($facebook_auth['post_pages']) && !empty($facebook_auth['post_pages']) ){
-			
-			$page_ids=explode(',', $facebook_auth['post_pages']);			
-		}		
-		
-		if ( isset($page_ids) && $fb_user_name=get_option('fb_token_user_name_'.$user_id, false) ) {
-			//has a user token
-			
-			foreach ($page_ids as $page_id) {				
-				
-				if ($fb_user_name=get_option('fb_page_'.$page_id.'_userid_'.$user_id, false)) {
-					
-					$fb_page = new AIT_CENTRA_SOCIAL_MEDIA;
-					$fb_page->id = $page_id;
-					$fb_page->name = get_option('fb_page_'.$page_id.'_pagename', '');
-					$fb_page->type = 'fan_page';
-					$fb_page->link = '';
-					$fb_page->icon = site_url().'/wp-content/plugins/ait-social-media-publish/images/'.$page_id.'.png';
-					
-					$result['social_media'][] = $fb_page;
-				}
-			}
-			
-		}
-		
-		
-		if (!empty($twitter_auth)){ 
-			
-			$twitter = new AIT_CENTRA_SOCIAL_MEDIA;	
-			$twitter->name = 'Twitter Tweet';
-			$twitter->type = 'twitter';
-			$twitter->link = '';
-			$twitter->icon = site_url().'/wp-content/plugins/ait-social-media-publish/images/twitter.png';
-			
-			$result['social_media'][] = $twitter;					
-		}
-		
-		if (!empty($youtube_auth)) {
-
-			$youtube = new AIT_CENTRA_SOCIAL_MEDIA;	
-			$youtube->name = 'YouTube Video';
-			$youtube->type = 'youtube';
-			$youtube->link = '';
-			$youtube->icon = site_url().'/wp-content/plugins/ait-social-media-publish/images/youtube.png';
-			
-			$result['social_media'][] = $youtube;				
-		}
-		
-		
-		$result['success'] = true;
-		return $result;
-	}
 	
-	
-	/*
-	** Social Media Update
-	**		Method: POST
-	**		Url: /garfield/api/social/update
-	**		Post data:
-	**		    token: string required (get it from user login response)
-	**		    post_id: int required
-	**		    type: string required ( Value should be one of these: fan_page, twitter, youtube or  fb_ia. )
-	**		    post_link_id: string optional (For fan_page is fb post link id,  twitter is twitter id,  youtube is youtube link, fb_ia TBD. )
-	**		    fb_page_id: string optional (For fan_page use only. If type is fan_page and it is not set, will return false. )
-	**		    post_link_time: string optional (Use for fan_page and twitter,  youtube not need, fb_ia TBD.  If type is fan_page twitter and it is not set, will return false. Format('Y-m-d H:i'))
-	**		    post_message: string optional (Use for fan_page and twitter,  youtube not need,  fb_ia TBD. )
-	**		Response:
-	**		    success:  true or false
-	**		    message: String
-	**		    source: String
-	**		    social_media: social media object or null	
-	*/
-	private function social_update(){		
-		$result = array(
-			'success'=> false,
-			'message'=>'',
-			'source'=> $this->getSource(),
-			'social_media' => null,
-		);	
-		global $SOCIAL_MEDIA_TYPES;
-		
-		// validate user has the right to create new user
-		$user_id= $this->validateToken();
-		if ($user_id==false){
-			header('HTTP/1.0 401 Unauthorized');
-			$result['message'] = 'Invalid token!';
-			return $result;			
-		}
-		
-		
-		// required post_id parameter		
-		if ( !isset($_POST['post_id']) || !is_numeric($_POST['post_id']) ){
-			$result['message'] = 'Post id is required!';
-			return $result;
-		}
-		$post_id = (int) $_POST['post_id'];
-		
-		
-		// required type parameter
-		if ( !isset($_POST['type']) || empty($_POST['type']) ){
-			$result['message'] = 'Type is required!';
-			return $result;
-		}
-		$type = trim( $_POST['type'] );
-		if ( !in_array($type, $SOCIAL_MEDIA_TYPES) ){
-			$result['message'] = 'Invalid type!';
-			return $result;
-		}
-		
-
-		// post_link_id optional parameter
-		$post_link_id = '';
-		if ( isset($_POST['post_link_id']) && !empty($_POST['post_link_id']) ){
-			$post_link_id = trim($_POST['post_link_id']);
-		} 
-		
-		
-		// fb_page_id optional parameter
-		$fb_page_id = '';
-		if ( isset($_POST['fb_page_id']) && !empty($_POST['fb_page_id']) ){
-			$fb_page_id = trim($_POST['fb_page_id']);
-		}
-		
-		
-		// post_link_time optional parameter
-		$post_link_time = '';
-		if ( isset($_POST['post_link_time']) && !empty($_POST['post_link_time']) ){
-			$post_link_time = trim($_POST['post_link_time']);
-		}
-		
-		
-		// post_message optional parameter
-		$post_message = '';
-		if ( isset($_POST['post_message']) && !empty($_POST['post_message']) ){
-			$post_message = trim($_POST['post_message']);
-		}
-		
-		// update fb fan page
-		if ( $type == 'fan_page' ) {
-			
-			if ( empty($fb_page_id) ){
-				$result['message'] = 'FB page id is required for fb post update!';
-				return $result;
-			}
-			
-			if ( empty($post_link_id) ){
-				$result['message'] = 'FB post link id is required for fb post update!';
-				return $result;
-			}			
-			
-			if ( empty($post_link_time) ){
-				$result['message'] = 'FB post link time is required for fb post update!';
-				return $result;
-			}
-			
-			
-			//2019-12-05 support multiple			
-			$new_post_link=(object)array(
-				'page_id'=>$fb_page_id,
-				'fb_post_link_id'=>$post_link_id,
-				'message'=>$post_message,
-				'user_id'=>$user_id,
-				'updated_time'=>$post_link_time,
-			);				
-				
-			
-			$idx=0;
-			while ($idx<=10) {		
-				if ($tmp=get_post_meta($post_id, '_fb_post_link_id_'.$fb_page_id.'_'.$idx, true)) {		
-					
-					//exist					
-					if ($fb_post_link=json_decode($tmp)){
-						if ($fb_post_link->fb_post_link_id==$post_link_id){
-							if ($response_message=update_post_meta( $post_id,  '_fb_post_link_id_'.$fb_page_id.'_'.$idx, json_encode($new_post_link, JSON_UNESCAPED_UNICODE ))){
-								$fb_page = new AIT_CENTRA_SOCIAL_MEDIA;	
-								$fb_page->id = $fb_page_id;
-								$fb_page->type = 'fan_page';
-								$fb_page->icon = site_url().'/wp-content/plugins/ait-social-media-publish/images/'.$fb_page_id.'.png';
-								$fb_page->link = 'https://www.facebook.com/permalink.php?story_fbid='.str_replace($fb_page_id.'_','',$new_post_link->fb_post_link_id).'&id='.$fb_page_id;			
-								$fb_page->post_link_id = $new_post_link->fb_post_link_id;
-								$fb_page->post_message = $new_post_link->message;
-								$fb_page->post_link_time = $new_post_link->updated_time;
-
-								$result['social_media'] = $fb_page;
-								$result['success'] = true;
-								break;
-							}
-						}						
-					}
-					
-					$idx++;
-										
-				} else {
-					if ($response_message=add_post_meta( $post_id,  '_fb_post_link_id_'.$fb_page_id.'_'.$idx, json_encode($new_post_link, JSON_UNESCAPED_UNICODE ), true)){
-												
-						$fb_page = new AIT_CENTRA_SOCIAL_MEDIA;	
-						$fb_page->id = $fb_page_id;
-						$fb_page->type = 'fan_page';
-						$fb_page->icon = site_url().'/wp-content/plugins/ait-social-media-publish/images/'.$fb_page_id.'.png';
-						$fb_page->link = 'https://www.facebook.com/permalink.php?story_fbid='.str_replace($fb_page_id.'_','',$new_post_link->fb_post_link_id).'&id='.$fb_page_id;			
-						$fb_page->post_link_id = $new_post_link->fb_post_link_id;
-						$fb_page->post_message = $new_post_link->message;
-						$fb_page->post_link_time = $new_post_link->updated_time;
-
-						$result['social_media'] = $fb_page;
-						$result['success'] = true;
-						break;
-					}
-				}
-			} 
-						
-		}
-		// end update fb fan page
-		
-		
-		// update twitter 
-		if ($type == 'twitter'){ 
-			
-			if ( empty($post_link_id) ){
-				$result['message'] = 'Twitter id is required for twitter update!';
-				return $result;
-			}			
-			
-			if ( empty($post_link_time) ){
-				$result['message'] = 'FB post link time is required for fb post update!';
-				return $result;
-			}
-			
-			
-			update_post_meta( $post_id, '_twitter_id', $post_link_id );
-			update_post_meta( $post_id, '_twitter_time', $post_link_time);
-			update_post_meta( $post_id, '_twitter_message', $post_message);
-		
-			
-			$updated_id = get_post_meta($post_id, '_twitter_id', true);
-			$updated_publish_time = get_post_meta($post_id, '_twitter_time', true);
-			$updated_message = get_post_meta($post_id, '_twitter_message', true);
-			
-			if ( $updated_id != $post_link_id ){
-				$result['message'] = 'Twitter updated id fail!';
-				return $result;
-			}
-			
-			if ( $post_link_time != $updated_publish_time ){
-				$result['message'] = 'Twitter updated time fail!';
-				return $result;
-			}
-			
-			if ( $updated_message != $post_message ){
-				$result['message'] = 'Twitter updated message fail!';
-				return $result;
-			}
-		
-			global $twitter_page_url;
-			$twitter = new AIT_CENTRA_SOCIAL_MEDIA;
-			$twitter->id = $updated_id;
-			$twitter->type = 'twitter';
-			$twitter->icon = site_url().'/wp-content/plugins/ait-social-media-publish/images/twitter.png';
-			$twitter->post_message = $updated_message;
-			$twitter->post_link_time = $updated_publish_time;
-			if ( isset ($twitter_page_url) ){
-				$twitter->link = $twitter_page_url.'/status/'.$updated_id;
-			}
-			
-			$result['social_media'] = $twitter;	
-			$result['success'] = true;
-		}
-		// end update twitter 
-		
-		
-		
-		// update youtube
-		if ($type == 'youtube') {
-			
-			if ( empty($post_link_id) ){
-				$result['message'] = 'YouTube link is required for twitter update!';
-				return $result;
-			}
-			
-			update_post_meta( $post_id, 'youtube_id', $post_link_id);
-
-			$updated_id = get_post_meta($post_id, 'youtube_id', true);
-			if ( $updated_id != $post_link_id ){
-				$result['message'] = 'YouTube updated link fail!';
-				return $result;
-			}
-			
-			$youtube = new AIT_CENTRA_SOCIAL_MEDIA;
-			$youtube->type = 'youtube';
-			$youtube->icon = site_url().'/wp-content/plugins/ait-social-media-publish/images/youtube.png';
-			$youtube->link = $updated_id;			
-			
-			$result['social_media'] = $youtube;
-			$result['success'] = true;
-		}
-		// end update youtube
-		
-		
-		if ( $result['social_media'] == null ){
-			$result['message'] = 'Can not update '.$type.' yet!';
-		} 
-	
-		return $result;
-	}
-	
-
-	/*
-	** Social Media Update
-	**		Method: POST
-	**		Url: /garfield/api/social/delete
-	**		Post data:
-	**		    token: string required (get it from user login response)
-	**		    post_id: int required
-	**		    type: string required ( Value should be one of these: fan_page, twitter, youtube or  fb_ia. )
-	**			fb_page_id: string optional (For fan_page use only. If type is fan_page and it is not set, will return false. )
-	**			post_link_id: string optional (For fan_page use only. If type is fan_page and it is not set, will return false. )
-	**		Response:
-	**		    success:  true or false
-	**		    message: String
-	**		    source: String
-	*/
-	private function social_delete(){		
-		$result = array(
-			'success'=> false,
-			'message'=>'',
-			'source'=> $this->getSource(),			
-		);	
-		global $SOCIAL_MEDIA_TYPES;
-		
-		// validate user has the right to create new user
-		$user_id= $this->validateToken();
-		if ($user_id==false){
-			header('HTTP/1.0 401 Unauthorized');
-			$result['message'] = 'Invalid token!';
-			return $result;			
-		}
-		
-		
-		// required post_id parameter		
-		if ( !isset($_POST['post_id']) || !is_numeric($_POST['post_id']) ){
-			$result['message'] = 'Post id is required!';
-			return $result;
-		}
-		$post_id = (int) $_POST['post_id'];
-		
-		
-		// required type parameter
-		if ( !isset($_POST['type']) || empty($_POST['type']) ){
-			$result['message'] = 'Type is required!';
-			return $result;
-		}
-		$type = trim( $_POST['type'] );
-		if ( !in_array($type, $SOCIAL_MEDIA_TYPES) ){
-			$result['message'] = 'Invalid type!';
-			return $result;
-		}
-		
-
-		
-		// delete fb fan page
-		if ( $type == 'fan_page' ) {			
-			
-			if ( !isset($_POST['fb_page_id']) || empty($_POST['fb_page_id']) ){
-				$result['message'] = 'FB page id is required for FB post delete!';
-				return $result;
-			}
-			$fb_page_id = trim($_POST['fb_page_id']);
-			
-			if ( !isset($_POST['post_link_id']) || empty($_POST['post_link_id']) ){
-				$result['message'] = 'FB post link id is required for FB post delete!';
-				return $result;
-			}
-			$post_link_id = trim($_POST['post_link_id']);
-			
-			//2019-12-05 support multiple
-			$idx=0;
-			while ($idx<=10){				
-				if ($tmp=get_post_meta($post_id, '_fb_post_link_id_'.$fb_page_id.'_'.$idx, true)){
-					if($fb_post_link=json_decode($tmp)){						
-						if ($fb_post_link->fb_post_link_id==$post_link_id){
-							delete_post_meta( $post_id, '_fb_post_link_id_'.$fb_page_id.'_'.$idx);
-							$result['success'] = true;
-							return $result;
-						}
-					}
-				} 			
-				$idx++;
-			} 
-			
-			if ( !metadata_exists('post', $post_id, '_fb_post_link_id_'.$fb_page_id) ){
-				$result['success'] = true;
-				return $result;
-			}
-			
-			// verify to delete the same post link id, if not the same id, return
-			$saved_link_id = get_post_meta($post_id, '_fb_post_link_id_'.$fb_page_id, true);			
-			if ( $saved_link_id != $post_link_id ){
-				$result['success'] = true;
-				return $result;
-			}
-			
-			$deleted_id = delete_post_meta( $post_id, '_fb_post_link_id_'.$fb_page_id );	//(bool) True on success, false on failure.
-			$deleted_time = delete_post_meta( $post_id, '_fb_post_link_time_'.$fb_page_id );	
-			$deleted_message = delete_post_meta( $post_id, '_fb_post_message_'.$fb_page_id );
-			$deleted_user_id = delete_post_meta( $post_id, '_fb_post_user_id_'.$fb_page_id);			
-			
-			if ( $deleted_id && $deleted_time && $deleted_message && $deleted_user_id ){
-				$result['success'] = true;
-			}
-			
-		}
-		
-		
-		
-		// delete twitter 
-		if ($type == 'twitter'){ 
-			
-			if ( !metadata_exists('post', $post_id, '_twitter_id') ){
-				$result['message'] = 'Twitter is not existed to be deleted!';
-				return $result;
-			}
-			
-			$deleted_id = delete_post_meta( $post_id, '_twitter_id');
-			$deleted_time = delete_post_meta( $post_id, '_twitter_time');
-			$deleted_message = delete_post_meta( $post_id, '_twitter_message');
-			if ( $deleted_id && $deleted_time && $deleted_message ){
-				$result['success'] = true;
-			}
-		}
-		
-		
-		// delete youtube 
-		if ($type == 'youtube') {
-			
-			if ( !metadata_exists('post', $post_id, 'youtube_id') ){
-				$result['message'] = 'YouTube is not existed to be deleted!';
-				return $result;
-			}
-			
-			$deleted_id = delete_post_meta( $post_id, 'youtube_id');
-			if ( $deleted_id ){
-				$result['success'] = true;
-			}			
-		}
-		
-		
-		if ( $result['success'] == false ){
-			$result['message'] = 'Delete '.$type.' fail!';
-		} 
-	
-		return $result;
-	}
-
-	
-
-	/*
-	** search terms by search text	
-	*/
-	private function search_terms(){
-		
-		$result = array(
-			'success'=> false,
-			'message'=>'',
-			'source'=> $this->getSource(),		
-			'items' => array(),
-		);
-		
-		
-		// validate user has the right to create new user
-		$user_id= $this->validateToken();
-		if ($user_id==false){
-			header('HTTP/1.0 401 Unauthorized');
-			$result['message'] = 'Invalid token!';
-			return $result;			
-		}
-		
-		// required parameters		
-		if ( !isset($_POST['taxonomy']) || empty($_POST['taxonomy']) ){
-			$result['message'] = 'Taxonomy is required!';
-			return $result;
-		}	
-		if ( !isset($_POST['text']) || empty($_POST['text']) ){
-			$result['message'] = 'Search_text is required!';
-			return $result;
-		}		
-		// end required parameters	
-		
-		$args = array(
-			'taxonomy'=>$_POST['taxonomy'],
-			'hide_empty' => false,
-			'name__like'    => $_POST['text'],
-		);
-		
-		$terms = get_terms( $args ); //(array|int|WP_Error) List of WP_Term instances and their children. Will return WP_Error, if any of $taxonomies do not exist.
-		
-		if ( is_wp_error($terms) ){
-			$result['message'] = $terms->get_error_message();
-		}
-		else {
-			foreach ($terms as $term) {
-				$result['items'][] = array(
-					'id'=> $term->term_id,
-					'name'=> $term->name,
-				);
-			}
-			
-			$result['success'] = true;
-		}
-		
-		
-		return $result;
-	}
-
-
 	/*
 	** Image Upload:  this is the process of retrieving a media item from another server instead of a traditional media upload.
 	** 		Method: POST
