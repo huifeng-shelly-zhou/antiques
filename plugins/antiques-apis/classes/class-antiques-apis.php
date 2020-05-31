@@ -116,9 +116,9 @@ class ANTIQUES_APIS {
 		
 		$result = array(
 			'success'=> false,
-			'headers'=>$headers,
-			'controller'=>$current_controller,
-			'action'=> str_replace('/', ' ', $action),
+			//'headers'=>$headers,
+			//'controller'=>$current_controller,
+			//'action'=> str_replace('/', ' ', $action),
 			'message'=>''
 			
 		);
@@ -171,6 +171,19 @@ class ANTIQUES_APIS {
 		return true;
 		
 	}	
+
+
+	/*
+	** Get App Feed 		
+	**	 Url: /OX/api/feed	
+	**	 Response:
+	**	   success:  true or false	
+	*/
+	private function feed(){
+		global $APP_Feeds;
+		
+		return $APP_Feeds;
+	}
 
 
 	/*
