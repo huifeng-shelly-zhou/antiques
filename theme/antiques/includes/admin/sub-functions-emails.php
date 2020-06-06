@@ -11,7 +11,8 @@ function emailNewAccount($user_id){
 	$user_login = stripslashes($user->user_login);
 	$user_display_name = $user->data->display_name;
 	$user_email = $user->user_email;
-	$site_name = get_bloginfo( 'name' );	
+	$site_name = get_bloginfo( 'name' );
+	$lang = get_user_meta($user_id, 'my_lang', true);
 
 	
 	// Generate something random for a password reset key.
@@ -29,7 +30,7 @@ function emailNewAccount($user_id){
 	
 	if (file_exists($template)){
 		
-		$subject = '您的'.$site_name.'帐户已创建！';
+		$subject = '您的'.$site_name.'帳戶已創建！';
 		$headers = array();
 		$headers[] = "Content-Type: text/html; charset=UTF-8";
 		//$headers[] = "Cc: Shop <Shop@aitsolution.ca>";	
@@ -47,8 +48,13 @@ function emailNewAccount($user_id){
 			$body = str_replace('[password]','', $body);
 		}
 		else{
-			$password_words = '您的密码是: '.$password;
+			$password_words = '您的密碼是: '.$password;
 			$body = str_replace('[password]',$password_words, $body);
+		}
+		
+		if (strpos($lang, 'cn') !== false && function_exists('hk_to_cn')) {
+			$subject = hk_to_cn($subject);
+			$body = hk_to_cn($body);
 		}
 		
 		return wp_mail($user_email,$subject, $body, $headers);
@@ -68,8 +74,9 @@ function resendVerification($email){
 		$user_login = stripslashes($user->user_login);
 		$user_display_name = $user->data->display_name;
 		$user_email = $user->user_email;
+		$lang = get_user_meta($user->ID, 'my_lang', true);
 		$site_name = get_bloginfo( 'name' );
-		$subject = '新验证码';
+		$subject = '新驗證碼';
 		$headers = array();
 		$headers[] = "Content-Type: text/html; charset=UTF-8";			
 		
@@ -93,6 +100,10 @@ function resendVerification($email){
 		// set site name	
 		$body = str_replace('[site_name]', $site_name, $body);
 		
+		if (strpos($lang, 'cn') !== false && function_exists('hk_to_cn')) {
+			$subject = hk_to_cn($subject);
+			$body = hk_to_cn($body);
+		}
 		
 		return wp_mail($user_email,$subject, $body, $headers);
 	}
@@ -101,12 +112,13 @@ function resendVerification($email){
 }
 
 function sendNewPwToUser($name, $email, $pw){
+	global $lang;
 	
 	$template = ABSPATH . 'wp-content/themes/antiques/templates/email_new_password.html';
 	if (file_exists($template)){		
 		
 		$site_name = get_bloginfo( 'name' );
-		$subject = "重置密码成功";
+		$subject = "重置密碼成功";
 		$headers = array();
 		$headers[] = "Content-Type: text/html; charset=UTF-8";		
 		
@@ -119,6 +131,10 @@ function sendNewPwToUser($name, $email, $pw){
 		// set site name	
 		$body = str_replace('[site_name]', $site_name, $body);
 		
+		if ($lang != null && strpos($lang, 'cn') !== false && function_exists('hk_to_cn')) {
+			$subject = hk_to_cn($subject);
+			$body = hk_to_cn($body);
+		}
 		
 		return wp_mail($email,$subject, $body, $headers);//Returns (bool) Whether the email contents were sent successfully.
 	}

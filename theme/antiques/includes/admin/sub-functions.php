@@ -68,9 +68,43 @@ function remove_antique_gallery_images_id($antique_id, $attachment_id){
 function validate_password($pw){
 	
 	if ($pw == null || empty($wp) || strlen($pw) < 8){
-		return '密码需多于八个字符!';
+		return '密碼需多於八個字符!';
 	}
 	
 	return true;
 }
+
+
+//traditional_to_simplified
+function hk_to_cn($org_content) {	
+	global $anq_zh2Hans;
+	
+	$converted = $org_content;
+	
+	if ( $anq_zh2Hans ) {
+		
+		$converted = strtr($converted, $anq_zh2Hans);	
+	
+	} else {
+		$converted='{error: anq_zh2Hans}'.$org_content;
+	}
+	return $converted;
+}//traditional_to_simplified
+
+
+function cn_to_hk($org_content){
+	global $anq_hans2cns;
+	
+	$converted = $org_content;
+	
+	if ( $anq_hans2cns ) {
+		
+		$converted = strtr($converted, $anq_hans2cns);	
+	
+	} else {
+		$converted='{error: anq_hans2cns}'.$org_content;
+	}
+	return $converted;
+}
+
 ?>

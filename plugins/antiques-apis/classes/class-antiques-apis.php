@@ -11,6 +11,7 @@ class ANTIQUES_APIS {
 	private $name;
 	private $version;
 	private $controllers;
+	private $endpoint_root;	
 	
 	private $user;
 	
@@ -54,6 +55,7 @@ class ANTIQUES_APIS {
 		$this->name='OX';
 		$this->version='1.0.0';	
 		$this->controllers = array('api');
+		$this->endpoint_root = site_url().'/'.$this->name.'/'.$this->controllers[0];		
 				
 		$plugin_rewrite = new Antiques_API_Rewrite( $this->name, $this->version );	
 		add_action( 'init', array( &$plugin_rewrite, 'add_rewrite_rules' ) );
@@ -119,8 +121,8 @@ class ANTIQUES_APIS {
 			//'headers'=>$headers,
 			//'controller'=>$current_controller,
 			//'action'=> str_replace('/', ' ', $action),
-			'message'=>''
-			
+			'message'=>'',
+		
 		);
 		
 		$action = str_replace('/','_',$action);
@@ -171,6 +173,91 @@ class ANTIQUES_APIS {
 		return true;
 		
 	}	
+	
+	private function getTermInfo($term, $lang = 'hk', $name=''){		
+		
+		if (is_a($term, 'WP_Term')){
+			$info = array(
+					'id'		=> $term->term_id,
+					'name'		=> (strpos($lang, 'cn') !== false)? hk_to_cn($term->name):cn_to_hk($term->name),					
+					'icon'		=> '',
+				);
+		}
+		else{
+			$info = array(
+					'id'		=> 0,
+					'name'		=> (strpos($lang, 'cn') !== false)? hk_to_cn($name):cn_to_hk($name),					
+					'icon'		=> '',
+				);
+		}
+		
+		return $info;
+	}
+	
+	private function getTermsMax3Levels($terms, $lang){
+	
+		$terms_top_levels = array();
+		
+		if (!is_array($terms)){
+			return array();
+		}
+		
+		foreach ( $terms as $term ) {
+			
+			if (!is_a($term, 'WP_Term')){
+				continue;
+			}
+			
+			if ($term->parent > 0){
+				
+				// get parent
+				$parent = get_term($term->parent);				
+				
+				
+				if ($parent->parent > 0){
+					// has grandparent
+					$grandparent = get_term($parent->parent);
+					
+					if (!isset($terms_top_levels[$grandparent->term_id])){
+						$terms_top_levels[$grandparent->term_id] = $this->getTermInfo($grandparent,$lang);
+					}
+					
+					if (!isset($terms_top_levels[$grandparent->term_id]['children'])){
+						$terms_top_levels[$grandparent->term_id]['children'] = array();
+					}
+					
+					if (!isset($terms_top_levels[$grandparent->term_id]['children'][$parent->term_id])){
+						$terms_top_levels[$grandparent->term_id]['children'][$parent->term_id] = $this->getTermInfo($parent,$lang);
+					}
+					
+					if (!isset($terms_top_levels[$grandparent->term_id]['children'][$parent->term_id]['children'])){
+						$terms_top_levels[$grandparent->term_id]['children'][$parent->term_id]['children'] = array();
+					}
+					
+					$terms_top_levels[$grandparent->term_id]['children'][$parent->term_id]['children'][$term->term_id] = $this->getTermInfo($term,$lang);
+				}
+				else{
+					// has one parent
+					if (!isset($terms_top_levels[$parent->term_id])){
+						$terms_top_levels[$parent->term_id] = $this->getTermInfo($parent,$lang);
+					}
+					
+					if (!isset($terms_top_levels[$parent->term_id]['children'])){
+						$terms_top_levels[$parent->term_id]['children'] = array();
+					}
+					$terms_top_levels[$parent->term_id]['children'][$term->term_id] = $this->getTermInfo($term,$lang);
+				}
+			}
+			else{
+				
+				// no parent
+				$terms_top_levels[$term->term_id] = $this->getTermInfo($term,$lang);
+			}		
+			
+		}//end foreach
+		
+		return $terms_top_levels;
+	}
 
 
 	/*
@@ -180,7 +267,53 @@ class ANTIQUES_APIS {
 	**	   success:  true or false	
 	*/
 	private function feed(){
-		global $APP_Feeds;
+		global $APP_Feeds, $lang;
+
+		if (!isset($APP_Feeds['filters'])){
+			$APP_Feeds['filters'] = array();
+		}
+		
+		$terms = get_terms('antique_cat', array(
+			'orderby'    => 'count',
+			'hide_empty'=>true,
+		));
+		
+		if ( !empty($terms) && !is_wp_error( $terms ) ){
+			
+			//$APP_Feeds['filters']['category_endpoint'] = $this->endpoint_root.'/category/';
+			
+			if (!isset($APP_Feeds['filters']['categories'])){
+				$APP_Feeds['filters']['categories'] = array();
+			}
+			
+			$categories_top_levels1 = array(0=> $this->getTermInfo(null, $lang, '所有分類'));
+			$categories_top_levels2 = $this->getTermsMax3Levels($terms, $lang);
+			
+			$APP_Feeds['filters']['categories'] = array_merge($categories_top_levels1, $categories_top_levels2);			
+				
+		}//end if	
+		
+		
+		$locations = get_terms('location', array(
+			'orderby'    => 'count',
+			'hide_empty'=>true,
+			'hierarchical'=>false,
+		));
+		if ( !empty($locations) && !is_wp_error( $locations ) ){
+			
+			//$APP_Feeds['filters']['category_endpoint'] = $this->endpoint_root.'/category/';
+			
+			if (!isset($APP_Feeds['filters']['locations'])){
+				$APP_Feeds['filters']['locations'] = array();
+			}
+			
+			$locations_top_levels1 = array(0=> $this->getTermInfo(null, $lang, '所有地區'));			
+			$locations_top_levels2 = $this->getTermsMax3Levels($locations, $lang);
+			
+			
+			$APP_Feeds['filters']['locations'] = array_merge($locations_top_levels1, $locations_top_levels2);			
+		
+		}//end if	
 		
 		return $APP_Feeds;
 	}

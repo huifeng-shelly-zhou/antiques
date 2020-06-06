@@ -2,6 +2,10 @@
 
 add_theme_support( 'post-thumbnails' );
 
+//add lib
+if (file_exists( dirname(__FILE__) .'/lib/anq_conversion.php')) {
+	require_once ('lib/anq_conversion.php');
+}
 
 //Post custom
 if (file_exists( dirname(__FILE__) .'/includes/admin/sub-function-post-custom.php')) {
