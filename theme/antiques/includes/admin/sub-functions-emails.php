@@ -100,10 +100,8 @@ function resendVerification($email){
 		// set site name	
 		$body = str_replace('[site_name]', $site_name, $body);
 		
-		if (strpos($lang, 'cn') !== false && function_exists('hk_to_cn')) {
-			$subject = hk_to_cn($subject);
-			$body = hk_to_cn($body);
-		}
+		$subject = antLang($subject, $lang);
+		$body = antLang($body, $lang);		
 		
 		return wp_mail($user_email,$subject, $body, $headers);
 	}

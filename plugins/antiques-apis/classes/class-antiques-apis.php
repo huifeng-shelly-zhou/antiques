@@ -33,7 +33,8 @@ class ANTIQUES_APIS {
 	
 		require_once plugin_dir_path( dirname( __FILE__ ) ) . 'classes/class-antiques-wp-rewrite.php';
 		require_once plugin_dir_path( dirname( __FILE__ ) ) . 'includes/setting.php';
-		require_once plugin_dir_path( dirname( __FILE__ ) ) . 'classes/class-user.php';		
+		require_once plugin_dir_path( dirname( __FILE__ ) ) . 'classes/class-user.php';	
+		require_once plugin_dir_path( dirname( __FILE__ ) ) . 'classes/class-posts.php';	
 	}
 	
 	public function init_hooks(){
@@ -59,8 +60,8 @@ class ANTIQUES_APIS {
 				
 		$plugin_rewrite = new Antiques_API_Rewrite( $this->name, $this->version );	
 		add_action( 'init', array( &$plugin_rewrite, 'add_rewrite_rules' ) );
-		add_filter( 'query_vars', array( &$plugin_rewrite, 'rewrite_query_vars') );	
-		add_action( 'template_redirect', array( &$this, 'action_redirect') );	
+		add_filter( 'query_vars', array( &$plugin_rewrite, 'rewrite_query_vars') );
+		add_action( 'template_redirect', array( &$this, 'action_redirect') );		
 		
 		/*
 		**	assign exception handler
@@ -72,7 +73,6 @@ class ANTIQUES_APIS {
 	public function action_redirect(){
 		
 		global $API_KEY, $API_SECRET;
-		
 	
 		
 		// validate controller
@@ -174,92 +174,7 @@ class ANTIQUES_APIS {
 		
 	}	
 	
-	private function getTermInfo($term, $lang = 'hk', $name=''){		
-		
-		if (is_a($term, 'WP_Term')){
-			$info = array(
-					'id'		=> $term->term_id,
-					'name'		=> (strpos($lang, 'cn') !== false)? hk_to_cn($term->name):cn_to_hk($term->name),					
-					'icon'		=> '',
-				);
-		}
-		else{
-			$info = array(
-					'id'		=> 0,
-					'name'		=> (strpos($lang, 'cn') !== false)? hk_to_cn($name):cn_to_hk($name),					
-					'icon'		=> '',
-				);
-		}
-		
-		return $info;
-	}
 	
-	private function getTermsMax3Levels($terms, $lang){
-	
-		$terms_top_levels = array();
-		
-		if (!is_array($terms)){
-			return array();
-		}
-		
-		foreach ( $terms as $term ) {
-			
-			if (!is_a($term, 'WP_Term')){
-				continue;
-			}
-			
-			if ($term->parent > 0){
-				
-				// get parent
-				$parent = get_term($term->parent);				
-				
-				
-				if ($parent->parent > 0){
-					// has grandparent
-					$grandparent = get_term($parent->parent);
-					
-					if (!isset($terms_top_levels[$grandparent->term_id])){
-						$terms_top_levels[$grandparent->term_id] = $this->getTermInfo($grandparent,$lang);
-					}
-					
-					if (!isset($terms_top_levels[$grandparent->term_id]['children'])){
-						$terms_top_levels[$grandparent->term_id]['children'] = array();
-					}
-					
-					if (!isset($terms_top_levels[$grandparent->term_id]['children'][$parent->term_id])){
-						$terms_top_levels[$grandparent->term_id]['children'][$parent->term_id] = $this->getTermInfo($parent,$lang);
-					}
-					
-					if (!isset($terms_top_levels[$grandparent->term_id]['children'][$parent->term_id]['children'])){
-						$terms_top_levels[$grandparent->term_id]['children'][$parent->term_id]['children'] = array();
-					}
-					
-					$terms_top_levels[$grandparent->term_id]['children'][$parent->term_id]['children'][$term->term_id] = $this->getTermInfo($term,$lang);
-				}
-				else{
-					// has one parent
-					if (!isset($terms_top_levels[$parent->term_id])){
-						$terms_top_levels[$parent->term_id] = $this->getTermInfo($parent,$lang);
-					}
-					
-					if (!isset($terms_top_levels[$parent->term_id]['children'])){
-						$terms_top_levels[$parent->term_id]['children'] = array();
-					}
-					$terms_top_levels[$parent->term_id]['children'][$term->term_id] = $this->getTermInfo($term,$lang);
-				}
-			}
-			else{
-				
-				// no parent
-				$terms_top_levels[$term->term_id] = $this->getTermInfo($term,$lang);
-			}		
-			
-		}//end foreach
-		
-		return $terms_top_levels;
-	}
-
-
 	/*
 	** Get App Feed 		
 	**	 Url: /OX/api/feed	
@@ -267,55 +182,18 @@ class ANTIQUES_APIS {
 	**	   success:  true or false	
 	*/
 	private function feed(){
-		global $APP_Feeds, $lang;
+		global $Feeds, $lang;
 
-		if (!isset($APP_Feeds['filters'])){
-			$APP_Feeds['filters'] = array();
-		}
-		
-		$terms = get_terms('antique_cat', array(
-			'orderby'    => 'count',
-			'hide_empty'=>true,
-		));
-		
-		if ( !empty($terms) && !is_wp_error( $terms ) ){
-			
-			//$APP_Feeds['filters']['category_endpoint'] = $this->endpoint_root.'/category/';
-			
-			if (!isset($APP_Feeds['filters']['categories'])){
-				$APP_Feeds['filters']['categories'] = array();
-			}
-			
-			$categories_top_levels1 = array(0=> $this->getTermInfo(null, $lang, '所有分類'));
-			$categories_top_levels2 = $this->getTermsMax3Levels($terms, $lang);
-			
-			$APP_Feeds['filters']['categories'] = array_merge($categories_top_levels1, $categories_top_levels2);			
-				
-		}//end if	
+		$endpoints = array();
+		$endpoints['filters_url'] = $this->endpoint_root . '/filters';
+		$endpoints['post_list_url'] = $this->endpoint_root . '/post/list';		
 		
 		
-		$locations = get_terms('location', array(
-			'orderby'    => 'count',
-			'hide_empty'=>true,
-			'hierarchical'=>false,
-		));
-		if ( !empty($locations) && !is_wp_error( $locations ) ){
-			
-			//$APP_Feeds['filters']['category_endpoint'] = $this->endpoint_root.'/category/';
-			
-			if (!isset($APP_Feeds['filters']['locations'])){
-				$APP_Feeds['filters']['locations'] = array();
-			}
-			
-			$locations_top_levels1 = array(0=> $this->getTermInfo(null, $lang, '所有地區'));			
-			$locations_top_levels2 = $this->getTermsMax3Levels($locations, $lang);
-			
-			
-			$APP_Feeds['filters']['locations'] = array_merge($locations_top_levels1, $locations_top_levels2);			
+		$Feeds['endpoints'] = $endpoints;
 		
-		}//end if	
+		file_put_contents(plugin_dir_path( dirname( __FILE__ ) ) . 'antiques_feeds.json', json_encode($Feeds));
 		
-		return $APP_Feeds;
+		return $Feeds;
 	}
 
 
@@ -324,6 +202,7 @@ class ANTIQUES_APIS {
 	**	 Url: /OX/api/user/login
 	**	 Post data:
 	**	   authorize  -  string required, base64 {email:password}
+	**	   firebase_token - string optional
 	**	 Response:
 	**	   success:  true or false
 	**	   message: String
@@ -332,9 +211,10 @@ class ANTIQUES_APIS {
 	**
 	*/
 	private function user_login(){
+		global $lang;
 		
 		if ( isset($this->user) ){
-			return $this->user->login($_POST);
+			return $this->user->login($_POST, $lang);
 		}
 		return $this->error_response;
 	}
@@ -423,9 +303,10 @@ class ANTIQUES_APIS {
 	**
 	*/		
 	private function user_register(){
+		global $lang;
 		
 		if ( isset($this->user) ){
-			return $this->user->register($_POST);	
+			return $this->user->register($_POST, $lang);	
 		}
 		return $this->error_response;		
 	}
@@ -495,7 +376,23 @@ class ANTIQUES_APIS {
 		return false;
 	}
 	
+	
+	private function filters(){
+		global $lang;
+		
+		$antiques = new ANTIQUES;	
+		
+		return $antiques->getPostsFilters($lang);
+	}
 
+	private function post_list(){
+		global $lang;
+		
+		$antiques = new ANTIQUES;
+		
+		
+		return $antiques->antiqueList($_POST, $lang, $this->endpoint_root);
+	}
 
 	/*
 	** list posts sort by authors	
@@ -609,11 +506,11 @@ class ANTIQUES_APIS {
 	/*
 	** list posts by condition	
 	*/
-	private function post_list(){		
+	private function post_list_2(){		
 		$result = array(
 			'success'=> false,
 			'message'=>'',
-			'source'=> $this->getSource(),	
+			'filters'=> array(),	
 			'paged' => 1,
 			'posts_per_page'=>20,
 			'total' => 0,			

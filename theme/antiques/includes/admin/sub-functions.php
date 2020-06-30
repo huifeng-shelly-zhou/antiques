@@ -64,6 +64,9 @@ function remove_antique_gallery_images_id($antique_id, $attachment_id){
 	set_antique_gallery_images_ids($gallery_image_ids);
 }
 
+function ant_get_placeholder(){
+	return site_url().'/wp-content/themes/antiques/images/image_not_avaliable_400.jpg';
+}
 
 function validate_password($pw){
 	
@@ -75,36 +78,24 @@ function validate_password($pw){
 }
 
 
-//traditional_to_simplified
-function hk_to_cn($org_content) {	
-	global $anq_zh2Hans;
+function antLang($content, $lang = 'hk'){
 	
-	$converted = $org_content;
-	
-	if ( $anq_zh2Hans ) {
+	if (strpos($lang, 'cn') !== false){
 		
-		$converted = strtr($converted, $anq_zh2Hans);	
-	
-	} else {
-		$converted='{error: anq_zh2Hans}'.$org_content;
+		global $anq_zh2Hans;
+		if ($anq_zh2Hans){
+			$content = strtr($content, $anq_zh2Hans);	
+		}		
 	}
-	return $converted;
-}//traditional_to_simplified
-
-
-function cn_to_hk($org_content){
-	global $anq_hans2cns;
-	
-	$converted = $org_content;
-	
-	if ( $anq_hans2cns ) {
+	else if (strpos($lang, 'hk') !== false){
 		
-		$converted = strtr($converted, $anq_hans2cns);	
-	
-	} else {
-		$converted='{error: anq_hans2cns}'.$org_content;
+		global $anq_hans2cns;
+		if ($anq_hans2cns){
+			$content = strtr($content, $anq_hans2cns);	
+		}
 	}
-	return $converted;
+	
+	return $content;
 }
 
 ?>

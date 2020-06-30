@@ -48,7 +48,7 @@ class ANTIQUES_USER
 		$myDate->modify('+24 hour');
 		$this->token_expiration = $myDate->format( DateTime::ATOM ); 
 		
-		$this->token = sprintf( '%04x%04x-%04x-%04x-%04x-%04x%04x%04x',
+		$this->token = sprintf( '%04x%04x-%04x-%04x-%04x-%04x%04x%04x-'.$this->id.'%04x',
 			// 32 bits for "time_low"
 			mt_rand( 0, 0xffff ), mt_rand( 0, 0xffff ),
 
@@ -65,10 +65,11 @@ class ANTIQUES_USER
 			mt_rand( 0, 0x3fff ) | 0x8000,
 
 			// 48 bits for "node"
-			mt_rand( 0, 0xffff ), mt_rand( 0, 0xffff ), mt_rand( 0, 0xffff )
+			mt_rand( 0, 0xffff ), mt_rand( 0, 0xffff ), mt_rand( 0, 0xffff ),
+			
+			// 16 bits for "time_mid"
+			mt_rand( 0, 0xffff )
 		);
-		
-		$this->token = $this->token.$this->id;
 		
 		return $this->token;
 	}//genToken
@@ -76,19 +77,18 @@ class ANTIQUES_USER
 
 	private function updateToken($user_id, $newToken, $newExpiration){
 		
-		$member_mapping = get_option( 'antiques_member_mapping', array()); //(mixed) Value set for the option.
+		$tokens = get_user_meta($user_id, 'antiques_member_tokens', true);
+		if(!isset($tokens) || !is_array($tokens)){
+			$tokens = array();
+		}
 		
 		// add new record
-		$member_mapping[$newToken] = array(
-			'id' => $user_id,
-			'expiration' => $newExpiration
-		);
-		
+		$tokens[$newToken] = $newExpiration;		
 		
 		// update mapping
-		if (!update_option( 'antiques_member_mapping', $member_mapping )){		
-			add_option( 'antiques_member_mapping', $member_mapping );
-		}		
+		if (!update_user_meta($user_id, 'antiques_member_tokens',$tokens)){
+			add_user_meta($user_id, 'antiques_member_tokens',$tokens, true);
+		}
 	}
 	
 	private function clearUserTokens($user_id){
@@ -113,57 +113,43 @@ class ANTIQUES_USER
 		}			
 		
 		$token = trim($post_params['token']);
-		$member_mapping = get_option( 'antiques_member_mapping', array()); //(mixed) Value set for the option.
+		
+		$user_id=end(explode('-',$token));
+		if (empty($user_id) || strlen($user_id) <= 4)
+			return false;
+		
+		
+		$length = strlen($user_id) - 4;
+		$user_id = substr($user_id,0, $length);
+		
+		$user_tokens = get_user_meta($user_id, 'antiques_member_tokens', true);
+		if(!isset($user_tokens) || !is_array($user_tokens)){
+			$user_tokens = array();
+		}
 		
 		//invalid token
-		if ( !isset($member_mapping[$token]) || !isset($member_mapping[$token]['id']) || !isset($member_mapping[$token]['expiration']) ){
+		if ( !isset($user_tokens[$token]) ){
 			return false;
 		}
-		
-		$user_id = $member_mapping[$token]['id'];
+
+		// valide expiration date
 		$myDate = new DateTime("now", new DateTimeZone("Asia/Hong_Kong"));		
 		$now = $myDate->format( DateTime::ATOM ); 
+		$expiration = $user_tokens[$token];
 		
-		
-		$hasValidToken = false;
-		$expiredTokens = array();
-		foreach ($member_mapping as $token=>$member){
+		if ($expiration <= $now){
+			unset($user_tokens[$token]);
+			update_user_meta($user_id, 'antiques_member_tokens',$user_tokens);
 			
-			if ( isset($member['id']) && $member['id'] == $user_id && isset($member['expiration'])){
-				
-				if ($member['expiration'] <= $now){
-					$expiredTokens[] = $token;
-				}
-				else{
-					$hasValidToken = true;
-				}				
-			}			
-		}
-		
-		// remove expried tokens
-		if ( count($expiredTokens)>0 ){
-			foreach($expiredTokens as $t){
-				unset($member_mapping[$t]);	
-			}
-			
-			// save change
-			if (!update_option( 'antiques_member_mapping', $member_mapping )){		
-				add_option( 'antiques_member_mapping', $member_mapping );
-			}
-		}
-		
-		
-		//all user tokens expried
-		if ( $hasValidToken == false ){
 			return false;
-		}
+		}	
 		
 		return $user_id;
 		
 	}//validateToken
 
 	
-	public function login($post_data){
+	public function login($post_data, $lang='hk'){
 		
 		$result = array(
 			'success'=> false,
@@ -174,7 +160,7 @@ class ANTIQUES_USER
 		
 		if (!isset($post_params['authorize']) || empty($post_params['authorize'])){
 		
-			$result['message'] = '验证用户登录信息出错。';
+			$result['message'] = antLang('验证用户登录信息出错。', $lang);
 			
 			return $result;
 		}
@@ -185,7 +171,7 @@ class ANTIQUES_USER
 		$user = get_user_by( 'email', $email ); // return WP_User object on success, false on failure.
 		if ( is_a($user, 'WP_User') && get_user_meta($user->ID, 'user-approved', true) != '1'){
 			$result['approved'] = false;
-			$result['message'] = '请先验证您的邮件地址再登录！';	
+			$result['message'] = antLang('请先验证您的邮件地址再登录！',  $lang);	
 			$result['resend_link'] = get_home_url().'/OX/api/user/send/verification?verify='.base64_encode($user->user_email);	
 					
 			return $result;
@@ -195,7 +181,7 @@ class ANTIQUES_USER
 		$user = wp_authenticate( $email , $password ); 
 		
 		if ( is_wp_error( $user ) ) {
-			$result['message'] = $user->get_error_message();
+			$result['message'] = antLang($user->get_error_message(), $lang);
 			return $result;
 		}
 		
@@ -220,7 +206,7 @@ class ANTIQUES_USER
 	}
 	
 	
-	public function register($post_params){
+	public function register($post_params, $lang = 'hk'){
 		
 		$result = array(
 			'success'=> false,
@@ -266,15 +252,12 @@ class ANTIQUES_USER
 				);
 				$display_name = '';
 				if ( isset($post_params['first_name']) && !empty($post_params['first_name']) ){
-					$args['first_name'] = sanitize_text_field($post_params['first_name']);								
+					$args['first_name'] = sanitize_text_field($post_params['first_name']);	
+					$args['display_name'] = $args['first_name'];	
 				}
 				
 				if ( isset($post_params['last_name']) && !empty($post_params['last_name']) ){
 					$args['last_name'] = sanitize_text_field($post_params['last_name']);
-				}	
-				
-				if ( isset($args['first_name']) && isset($args['last_name']) ){
-					$args['display_name'] = $args['first_name'] . ' ' . $args['last_name'];
 				}
 				
 				wp_update_user( $args ); //If successful, returns the user_id, otherwise returns a WP_Error object.
@@ -283,6 +266,14 @@ class ANTIQUES_USER
 				// set user role to vendor
 				$user_info  = get_userdata( $user_id );
 				$user_info->set_role('antique_player');
+				
+				// set firebase notification if have
+				if (isset($post_params['firebase_token'])){
+			
+					if (!update_user_meta($user_id, 'firebase_token', $post_params['firebase_token'])){
+						add_user_meta($user_id, 'firebase_token', $post_params['firebase_token'], true);
+					}
+				}
 				
 				$result->success = true;				
 				$result->message = '注册成功！请到您的电子邮箱查看您的验证电子邮件！';
