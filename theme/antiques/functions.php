@@ -7,6 +7,11 @@ if (file_exists( dirname(__FILE__) .'/lib/anq_conversion.php')) {
 	require_once ('lib/anq_conversion.php');
 }
 
+//User custom
+if (file_exists( dirname(__FILE__) .'/includes/admin/sub-function-user.php')) {
+	require_once ('includes/admin/sub-function-user.php');
+}
+
 //Post custom
 if (file_exists( dirname(__FILE__) .'/includes/admin/sub-function-post-custom.php')) {
 	require_once ('includes/admin/sub-function-post-custom.php');
@@ -46,7 +51,5 @@ function add_theme_scripts() {
     wp_enqueue_script( 'bootstrap', get_template_directory_uri() . '/js/bootstrap.min.4.4.1.js', array ('jquery'), '1.0', false);
 	
 }
-
-
 
 ?>

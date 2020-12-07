@@ -1,5 +1,93 @@
 <?php
 /**
+ * Block user login when is not in allowed roles.
+ * 
+*/
+add_action( 'admin_init', 'restrict_admin', 1 );
+function restrict_admin(){
+	//if not administrator, kill WordPress execution and provide a message
+	$user = wp_get_current_user();
+	$allowed_roles = array( 'administrator' );
+	if ( ! array_intersect( $allowed_roles, $user->roles ) ) {
+	   wp_die( __('You are not allowed to access this part of the site.') );
+	}
+}
+
+// add custom user role
+function antique_new_roles() {  
+
+	add_role(
+		'vip_player',
+		'VIP Player',
+		array(
+			'read'        		=> true,
+			'edit_posts'		=> true,
+			'delete_posts' 		=> true,
+			'publish_posts '	=> true
+		)
+	);
+	
+	add_role(
+		'player',
+		'Player',
+		array(
+			'read'        		=> true,
+			'edit_posts'		=> true,
+			'delete_posts' 		=> true,
+			'publish_posts '	=> true
+		)
+	);    
+ 
+}
+add_action('admin_init', 'antique_new_roles');
+// end add custom user role	
+
+
+
+function new_modify_user_table( $column ) {
+    $column['approved'] = 'Approved';
+    return $column;
+}
+add_filter( 'manage_users_columns', 'new_modify_user_table' );
+
+
+function new_modify_user_table_row( $val, $column_name, $user_id ) {
+    switch ($column_name) {
+        case 'approved' :
+			$approved = get_user_meta($user_id, 'user-approved', true);
+            return ( $approved === '1')? 'True':'False';
+        default:
+    }
+    return $val;
+}
+add_filter( 'manage_users_custom_column', 'new_modify_user_table_row', 10, 3 );
+
+
+add_filter('get_avatar_data', 'antProfilePicture', 12, 2);
+function antProfilePicture($args, $id_or_email){
+	
+	if ( is_numeric( $id_or_email ) ) {
+		$avatar = get_user_meta($id_or_email, 'author_profile_picture', true);
+		if (!empty($avatar) && strlen($avatar) > 4 && substr($avatar, 0, 4) == 'http'){
+			$args['url'] = $avatar;
+		}
+	}
+	return $args;
+}
+
+
+add_filter('user_row_actions',  'deals_custom_user_row_actions', 16, 2);
+function deals_custom_user_row_actions($actions, $user_object){
+	
+	if( $user_object instanceof WP_User ){
+		$user_object->first_name = $user_object->data->display_name;
+	}
+	
+	return $actions;
+}
+
+//===============================================================================================================
+/**
  * Add/Remove user privilege.
  *
  * This function is hooked into the actions/filters below:
@@ -9,8 +97,8 @@
 */
 
 
-add_action('pre_get_posts','users_own_attachments');
-add_action('pre_get_posts','users_own_posts');
+//add_action('pre_get_posts','users_own_attachments');
+//add_action('pre_get_posts','users_own_posts');
 
 function users_own_attachments($wp_query_obj) {
     global $current_user, $pagenow;
@@ -107,7 +195,7 @@ function views_filter_for_own_posts( $views ) {
 */
 
 // Instantiate new class
-$restrict_categories_load = new RestrictCategories();
+//$restrict_categories_load = new RestrictCategories();
 
 // Restrict Categories class
 class RestrictCategories{
