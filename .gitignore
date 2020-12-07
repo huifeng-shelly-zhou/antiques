@@ -1,3 +1,4 @@
 /wp-includes
 /wp-admin
 /images
+/plugins/antiques-apis/includes/setting.php
