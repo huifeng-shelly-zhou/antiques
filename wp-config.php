@@ -17,17 +17,17 @@
 // ** MySQL settings - You can get this info from your web host ** //
 /** The name of the database for WordPress */
 define('WP_CACHE', true);
-define( 'WPCACHEHOME', '/home/shezho5/antiques-fun.club/wp-content/plugins/wp-super-cache/' );
-define('DB_NAME', 'antiques_fun_club');
+define( 'WPCACHEHOME', '/home/shezho5/collectionfun.club/wp-content/plugins/wp-super-cache/' );
+define('DB_NAME', 'collectionfun_club');
 
 /** MySQL database username */
-define('DB_USER', 'antiquesfunclub');
+define('DB_USER', 'collectionfunclu');
 
 /** MySQL database password */
-define('DB_PASSWORD', 'sG8cVdzP');
+define('DB_PASSWORD', 'VGWjNdhM');
 
 /** MySQL hostname */
-define('DB_HOST', 'mysql.antiques-fun.club');
+define('DB_HOST', 'mysql.collectionfun.club');
 
 /** Database Charset to use in creating database tables. */
 define('DB_CHARSET', 'utf8');
@@ -44,14 +44,14 @@ define('DB_COLLATE', '');
  *
  * @since 2.6.0
  */
-define('AUTH_KEY',         'RvSzz_Dt|Qws%x?5KBa*K:LTNnG2wJLhWi)8bH*Nm?LvSsqo^/svE6#"Sw(~b?ZJ');
-define('SECURE_AUTH_KEY',  '2X"uqDEl&kdoArXg`4*fnh2kYS9se)7+0?`Dz^V9;$+epkMd$Yi!:T!9hJoT_Ao+');
-define('LOGGED_IN_KEY',    '/sW!+&eIJmO_P&#2#i4V4H8omrvoV~0@4ON_00D)^1D3J5tRz0o^Nm`6gn;YRnr|');
-define('NONCE_KEY',        '$m75E$isl~Fi8:$YHf1s`^EUE4fQ$g/dt;z(pZ+`N1KwaSTWR@p"%L/hI?"S5W*&');
-define('AUTH_SALT',        'yr(;N:z9o#6lNu+F|jyEUR)zR*3fg3^PI4%7_um6dFB#Y$5%_+sPBqApv2oc(5+B');
-define('SECURE_AUTH_SALT', 'q+E"Ta^h?22"p)*SHaMGEp78/fUzHqAy3K0om69DP&LPye0jDp;mAe3KYpwOOIqH');
-define('LOGGED_IN_SALT',   'xcE6rw/wNa@pob)Ft$(JS9YX?)pHwpa2DnTyDS"a1zysM|wY_"r^ZlmTZR?;*T"L');
-define('NONCE_SALT',       'iVe#Y|tcLq$Pmn+fy1M+cwj6D%EYuvfKDXWkZ?+wqb_hI"ffN?)5VNYqsOhyZlil');
+define('AUTH_KEY',         '3?`AD%_Cce0Ldw!9YNUevKXaX~Eq$bEB!V2E9IBAYHW!6J`5"jAEXnUG7y:ZgabD');
+define('SECURE_AUTH_KEY',  'Q8^D`O4T+?XG2+i+q)81FV$ZSD!??;(6xG#Rbf9M(HvXdMzHS@a8"Aez#z"gUHpU');
+define('LOGGED_IN_KEY',    'J)pClUrXFI:Z|ZWJC``s%rN!r@"~gn#i/P*I)xpZ_z$xO*vnn*S&|5krPqsJ%:z8');
+define('NONCE_KEY',        'accD`$YX^ZE8qkZ02SpS*RLh/NzSin692AYi2?h?gVDUSG!zxz(o0t:3|GOdPM"P');
+define('AUTH_SALT',        ':O2kCr`p:ll&UcIqb~qVih~Z`2v214vhn+XSz!zluh4k:7|XEwMegfAp)Ao5RH9z');
+define('SECURE_AUTH_SALT', 'oVII/;m"AgcdD!w;@Ccj09er1IK$P"&DxPMBkdXC#qodYBig/vf$WGn(vb0N_pV5');
+define('LOGGED_IN_SALT',   '5g#K!G/l^o($^NND)d/f*3C!q4BUhO"L#D0;TQIS;o$+&vseal?/m;GyB_EEy&yT');
+define('NONCE_SALT',       'Ol$77^HkdTt63"pIWfG(Gd~l03D*&iJn3?FA`4kO5kA7n/K6dRmyd)u5y%cGEI!$');
 
 /**#@-*/
 
@@ -61,7 +61,7 @@ define('NONCE_SALT',       'iVe#Y|tcLq$Pmn+fy1M+cwj6D%EYuvfKDXWkZ?+wqb_hI"ffN?)5
  * You can have multiple installations in one database if you give each a unique
  * prefix. Only numbers, letters, and underscores please!
  */
-$table_prefix  = 'wp_4frue7_';
+$table_prefix  = 'wp_vq59wb_';
 
 /**
  * Limits total Post Revisions saved per Post/Page.
@@ -86,7 +86,9 @@ define('WPLANG', '');
  * It is strongly recommended that plugin and theme developers use WP_DEBUG
  * in their development environments.
  */
-define('WP_DEBUG', true);
+define( 'WP_DEBUG', true );
+define( 'WP_DEBUG_DISPLAY', true );
+define( 'WP_DEBUG_LOG', true );
 
 /**
  * Removing this could cause issues with your experience in the DreamHost panel

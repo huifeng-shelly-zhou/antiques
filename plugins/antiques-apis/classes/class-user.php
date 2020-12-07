@@ -13,7 +13,8 @@ class ANTIQUES_USER
 	public $description = '';
 	public $token = '';
 	public $token_expiration ='';	
-	public $roles = array();	
+	public $roles = array();
+	public $providers = array();
 	
 	public function __construct(){ 
     }
@@ -27,15 +28,25 @@ class ANTIQUES_USER
 			$this->last_name =$user->last_name;
 			$this->display_name = empty($user->data->display_name)? $user->first_name:$user->data->display_name;
 			$this->email = $user->user_email;			
-			$this->roles = $user->roles;			
-			$this->description = get_user_meta($user->ID, 'description', true);
+			$this->roles = $user->roles;
 			
-			$this->avatar = get_user_meta($user->ID, 'author_profile_picture', true);
-			if ( empty($this->avatar) ){
-				$this->avatar = esc_url( get_avatar_url( $user->ID ) );
-			}
+			$user_meta = get_user_meta($user->ID);
+			foreach($user_meta as $key=>$value){
+				
+				if ($key == 'description'){
+					$this->description = $value[0];
+				}
+				else if($key == 'author_profile_picture'){
+					$this->avatar = $value[0];
+				}
+				else if($key == 'login_providers'){
+					$this->providers = unserialize($value[0]);
+				}
+				else if($key == 'user-approved'){					
+					$this->approved = ($value[0] === '1')? 'true':'false'; 
+				}				
+			}		
 			
-			$this->approved = (get_user_meta($user->ID, '_user_approved', true) === 'true')? true:false;
 		}
 	}
 
@@ -45,10 +56,10 @@ class ANTIQUES_USER
 			return '';
 		}
 		$myDate = new DateTime("now", new DateTimeZone("Asia/Hong_Kong"));
-		$myDate->modify('+24 hour');
+		$myDate->modify('+7 days');
 		$this->token_expiration = $myDate->format( DateTime::ATOM ); 
 		
-		$this->token = sprintf( '%04x%04x-%04x-%04x-%04x-%04x%04x%04x',
+		$this->token = sprintf( '%04x%04x-%04x-%04x-%04x-%04x%04x%04x-'.$this->id.'%04x',
 			// 32 bits for "time_low"
 			mt_rand( 0, 0xffff ), mt_rand( 0, 0xffff ),
 
@@ -65,10 +76,11 @@ class ANTIQUES_USER
 			mt_rand( 0, 0x3fff ) | 0x8000,
 
 			// 48 bits for "node"
-			mt_rand( 0, 0xffff ), mt_rand( 0, 0xffff ), mt_rand( 0, 0xffff )
+			mt_rand( 0, 0xffff ), mt_rand( 0, 0xffff ), mt_rand( 0, 0xffff ),
+			
+			// 16 bits for "time_mid"
+			mt_rand( 0, 0xffff )
 		);
-		
-		$this->token = $this->token.$this->id;
 		
 		return $this->token;
 	}//genToken
@@ -76,105 +88,82 @@ class ANTIQUES_USER
 
 	private function updateToken($user_id, $newToken, $newExpiration){
 		
-		$member_mapping = get_option( 'antiques_member_mapping', array()); //(mixed) Value set for the option.
+		$tokens = get_user_meta($user_id, 'antiques_member_tokens', true);
+		if(!isset($tokens) || !is_array($tokens)){
+			$tokens = array();
+		}
 		
 		// add new record
-		$member_mapping[$newToken] = array(
-			'id' => $user_id,
-			'expiration' => $newExpiration
-		);
-		
+		$tokens[$newToken] = $newExpiration;		
 		
 		// update mapping
-		if (!update_option( 'antiques_member_mapping', $member_mapping )){		
-			add_option( 'antiques_member_mapping', $member_mapping );
-		}		
-	}
-	
-	private function clearUserTokens($user_id){
-		
-		$member_mapping = get_option( 'antiques_member_mapping', array()); //(mixed) Value set for the option.
-		
-		$updated_member_mapping = array_filter( function ($values) {	
-			return ( isset($values['id']) && $values['id'] != $user_id);
-		}, $member_mapping);
-		
-		// update mapping
-		if (!update_option( 'antiques_member_mapping', $updated_member_mapping )){		
-			add_option( 'antiques_member_mapping', $updated_member_mapping );
+		if (!update_user_meta($user_id, 'antiques_member_tokens',$tokens)){
+			add_user_meta($user_id, 'antiques_member_tokens',$tokens, true);
 		}
 	}
 	
 	
-	public function validateToken($post_params){		
+	public function validateToken($post_params, $check_token_expired = true){		
 			
 		if (!isset($post_params['token']) || empty($post_params['token'])){
 			return false;
 		}			
 		
 		$token = trim($post_params['token']);
-		$member_mapping = get_option( 'antiques_member_mapping', array()); //(mixed) Value set for the option.
+		
+		$token_splits = explode('-',$token);
+		$user_id=end($token_splits);
+		if (empty($user_id) || strlen($user_id) <= 4)
+			return false;
+		
+		
+		$length = strlen($user_id) - 4;
+		$user_id = substr($user_id,0, $length);
+		
+		$user_tokens = get_user_meta($user_id, 'antiques_member_tokens', true);
+		if(!isset($user_tokens) || !is_array($user_tokens)){
+			$user_tokens = array();
+		}
 		
 		//invalid token
-		if ( !isset($member_mapping[$token]) || !isset($member_mapping[$token]['id']) || !isset($member_mapping[$token]['expiration']) ){
+		if ( !isset($user_tokens[$token]) ){
 			return false;
 		}
 		
-		$user_id = $member_mapping[$token]['id'];
+		if (!$check_token_expired){
+			return $user_id;
+		}
+
+		// valide expiration date
 		$myDate = new DateTime("now", new DateTimeZone("Asia/Hong_Kong"));		
 		$now = $myDate->format( DateTime::ATOM ); 
+		$expiration = $user_tokens[$token];
 		
-		
-		$hasValidToken = false;
-		$expiredTokens = array();
-		foreach ($member_mapping as $token=>$member){
+		if ($expiration <= $now){
+			unset($user_tokens[$token]);
+			update_user_meta($user_id, 'antiques_member_tokens',$user_tokens);
 			
-			if ( isset($member['id']) && $member['id'] == $user_id && isset($member['expiration'])){
-				
-				if ($member['expiration'] <= $now){
-					$expiredTokens[] = $token;
-				}
-				else{
-					$hasValidToken = true;
-				}				
-			}			
-		}
-		
-		// remove expried tokens
-		if ( count($expiredTokens)>0 ){
-			foreach($expiredTokens as $t){
-				unset($member_mapping[$t]);	
-			}
-			
-			// save change
-			if (!update_option( 'antiques_member_mapping', $member_mapping )){		
-				add_option( 'antiques_member_mapping', $member_mapping );
-			}
-		}
-		
-		
-		//all user tokens expried
-		if ( $hasValidToken == false ){
 			return false;
-		}
+		}	
 		
 		return $user_id;
 		
 	}//validateToken
 
 	
-	public function login($post_data){
+	public function login($post_params, $lang='hk'){
 		
 		$result = array(
 			'success'=> false,
 			'message'=>'',
 			'approved' => false,
-			'user' => null
+			'user' => null,			
 		);
 		
 		if (!isset($post_params['authorize']) || empty($post_params['authorize'])){
 		
-			$result['message'] = '验证用户登录信息出错。';
+			$result['message'] = antLang('验证用户登入信息出错。', $lang);
+			$result['message'] = ($lang == 'en')? 'Error on verifying user login information.':$result['message'];
 			
 			return $result;
 		}
@@ -185,7 +174,8 @@ class ANTIQUES_USER
 		$user = get_user_by( 'email', $email ); // return WP_User object on success, false on failure.
 		if ( is_a($user, 'WP_User') && get_user_meta($user->ID, 'user-approved', true) != '1'){
 			$result['approved'] = false;
-			$result['message'] = '请先验证您的邮件地址再登录！';	
+			$result['message'] = antLang('请先验证您的邮件地址再登入！',  $lang);	
+			$result['message'] = ($lang == 'en')? 'Please verify your email address before login!':$result['message'];
 			$result['resend_link'] = get_home_url().'/OX/api/user/send/verification?verify='.base64_encode($user->user_email);	
 					
 			return $result;
@@ -195,7 +185,8 @@ class ANTIQUES_USER
 		$user = wp_authenticate( $email , $password ); 
 		
 		if ( is_wp_error( $user ) ) {
-			$result['message'] = $user->get_error_message();
+			$result['message'] = antLang('邮件地址或密碼不正確。',  $lang);
+			$result['message'] = ($lang == 'en')? 'Incorrect email address or password.':$result['message'];	
 			return $result;
 		}
 		
@@ -203,11 +194,16 @@ class ANTIQUES_USER
 		$result['success'] = true;
 		
 		$this->populateUser($user);
-		if (isset($post_data['firebase_token'])){
+		if (isset($post_params['firebase_token'])){
 			
-			if (!update_user_meta($this->id, 'firebase_token', $post_data['firebase_token'])){
-				add_user_meta($this->id, 'firebase_token', $post_data['firebase_token'], true);
+			if (!update_user_meta($this->id, 'firebase_token', $post_params['firebase_token'])){
+				add_user_meta($this->id, 'firebase_token', $post_params['firebase_token'], true);
 			}
+		}
+		
+		// save user selected lang
+		if (!update_user_meta($this->id, 'my_lang', $lang)){
+			add_user_meta($this->id, 'my_lang', $lang, true);
 		}
 		
 		//update user token		
@@ -215,12 +211,137 @@ class ANTIQUES_USER
 		$this->updateToken($this->id, $newToken, $this->token_expiration);				
 		$result['user'] = $this;
 		
+		
 		return $result;
 		
 	}
 	
 	
-	public function register($post_params){
+	public function providerAccount($post_params, $lang = 'hk'){
+		
+		$result = array(
+			'success'=> false,
+			'message'=>'',			
+			'user' => null,			
+		);
+		
+		if (!isset($post_params['authorize']) || empty($post_params['authorize'])){		
+			
+			$result['message'] = 'No email and id.';		
+			return $result;
+		}
+		
+		if (!isset($post_params['provider']) || empty($post_params['provider'])){		
+			
+			$result['message'] = 'Provider not found!';		
+			return $result;
+		}
+		
+		list($email, $provider_account_id)=explode(':',base64_decode($post_params['authorize']));
+		
+		$provider = trim($post_params['provider']);		
+		
+		if (is_email( $email ) == false){
+			$result['message'] = antLang('电子信箱格式不符!', $lang);
+			$result['message'] = ($lang == 'en')? 'Invalid email address.':$result['message'];
+			return $result;
+		}
+		
+		$user = get_user_by( 'email', $email );
+		if ( $user ){
+			$user_id = $user->ID;
+		}
+		else{
+			// create user if not exist
+			$user_id = wp_create_user( $email, $provider_account_id, $email );
+			if (is_wp_error($user_id)){
+				$result['message'] = $user_id->get_error_message();				
+				return $result;
+			}
+			
+			$user = get_userdata( $user_id );
+			$user->set_role('player');
+			
+			if (!update_user_meta($user_id, 'user-approved','1')){
+				add_user_meta($user_id, 'user-approved','1', true);
+			}
+		}
+		
+		// update user		
+		$user->user_email = $email;
+		
+		if ( isset($post_params['display_name']) && !empty($post_params['display_name']) ){
+			$user->data->display_name = sanitize_text_field($post_params['display_name']);
+		}
+		
+		wp_update_user( $user );
+		
+		if (isset($post_params['firebase_token'])){
+			
+			if (!update_user_meta($user_id, 'firebase_token', $post_params['firebase_token'])){
+				add_user_meta($user_id, 'firebase_token', $post_params['firebase_token'], true);
+			}
+		}
+		
+		// save user selected lang
+		if (!update_user_meta($user_id, 'my_lang', $lang)){
+			add_user_meta($user_id, 'my_lang', $lang, true);
+		}
+		
+		// save user login provider
+		$user_providers =  get_user_meta($user_id, 'login_providers', true);
+		if (empty($user_providers)){
+			$user_providers = array();
+		}
+		else if (!is_array($user_providers)){
+			$user_providers = unserialize($user_providers);
+		}		
+		if (!in_array($provider, $user_providers)){
+			// if not the same provider, add the new provider to the account
+			$user_providers[] = $provider;			
+			update_user_meta($user_id, 'login_providers', $user_providers);
+		}
+		
+		
+		if (isset($post_params['avatar']) && strlen($post_params['avatar']) > 4 && substr($post_params['avatar'], 0, 4) == 'http'){
+			
+			$file_name = $provider.'_avatar_'.$user_id.'.png';
+			$result['file_name'] = $file_name;
+			$wp_upload_dir = wp_upload_dir();
+			$path = isset($wp_upload_dir['path'])? $wp_upload_dir['path']:'';
+			$url = isset($wp_upload_dir['url'])? $wp_upload_dir['url']:'';
+			
+			if (!empty($path)){
+				
+				$image = $path.'/'.$file_name;
+				$image_url = $url.'/'.$file_name;
+				
+				file_put_contents($image, file_get_contents($post_params['avatar']));
+				
+				if (!update_user_meta($user_id, 'author_profile_picture', $image_url)){
+					add_user_meta($user_id, 'author_profile_picture', $image_url, true);
+				}
+			}
+		}
+				
+		
+		// get user updated info
+		$user = get_userdata( $user_id );
+		$this->populateUser($user);
+		
+		
+		//update user token		
+		$newToken = $this->genToken();
+		$this->updateToken($this->id, $newToken, $this->token_expiration);				
+		$result['user'] = $this;
+		$result['success'] = true;
+		
+		return $result;
+		
+	}
+	
+	
+	public function register($post_params, $lang = 'hk'){
 		
 		$result = array(
 			'success'=> false,
@@ -228,26 +349,35 @@ class ANTIQUES_USER
 		);
 		
 		if (!isset($post_params['authorize']) || empty($post_params['authorize'])){		
-			$result->data = null;
-			$result->message = 'Error. No email and password.';		
+			
+			$result['message'] = 'No email and password.';		
 			return $result;
 		}
 		
 		list($email, $password)=explode(':',base64_decode($post_params['authorize']));
 		
 		if (is_email( $email ) == false){
-			$result->message = '电子信箱格式不符!';
-			$result->data = null;
+			$result['message'] = antLang('电子信箱格式不符!', $lang);
+			$result['message'] = ($lang == 'en')? 'Invalid email address.':$result['message'];
 			return $result;
 		}	
-		else if ( ($valid = validate_password($password)) !== true){
-			$result->message= $valid;
-			$result->data = null;		
+		else if ( ($valid = validate_password($password, $lang)) !== true){
+			$result['message']= $valid;		
 			return $result;
 		}	
 		else if (email_exists($email)){
-			$result->message = '此电子信箱已被注册, 请使用其他电子信箱或点击此处重置密码!';	
-			$result->data = null;		
+			
+			$user = get_user_by( 'email', $email );
+			$user_providers =  get_user_meta($user->ID, 'login_providers', true);
+			if( is_array($user_providers) && count($user_providers) > 0 ){
+				$result['message'] = antLang('此电子信箱是已'.implode(', ', $user_providers).'注册, 请使用你的'.implode(', ', $user_providers).'帳號登入!', $lang);
+				$result['message'] = ($lang == 'en')? 'This email is already registered by '.implode(', ', $user_providers).' login. Please use your '.implode(', ', $user_providers).' account to login again!':$result['message'];
+			}
+			else{
+				$result['message'] = antLang('此电子信箱已被注册, 请使用其他电子信箱或重置密码!', $lang);
+				$result['message'] = ($lang == 'en')? 'This email has been used. Please use another email or reset your password!':$result['message'];
+			}			
+			
 			return $result;
 		}
 		else {		
@@ -255,7 +385,7 @@ class ANTIQUES_USER
 			$user_id = wp_create_user( $email, $password, $email );//When successful returns the user ID,In case of failure (username or email already exists) the function returns an error object;
 			
 			if (is_wp_error($user_id)){
-				$result->message = $user_id->get_error_message();				
+				$result['message'] = $user_id->get_error_message();				
 				return $result;
 			}
 			else if (is_int($user_id) && $user_id > 0){
@@ -264,28 +394,35 @@ class ANTIQUES_USER
 				$args = array(
 					'ID' => $user_id,
 				);
-				$display_name = '';
-				if ( isset($post_params['first_name']) && !empty($post_params['first_name']) ){
-					$args['first_name'] = sanitize_text_field($post_params['first_name']);								
-				}
 				
-				if ( isset($post_params['last_name']) && !empty($post_params['last_name']) ){
-					$args['last_name'] = sanitize_text_field($post_params['last_name']);
-				}	
-				
-				if ( isset($args['first_name']) && isset($args['last_name']) ){
-					$args['display_name'] = $args['first_name'] . ' ' . $args['last_name'];
-				}
+				if ( isset($post_params['display_name']) && !empty($post_params['display_name']) ){
+					$args['display_name'] = sanitize_text_field($post_params['display_name']);
+				}				
 				
 				wp_update_user( $args ); //If successful, returns the user_id, otherwise returns a WP_Error object.
 				
 				
 				// set user role to vendor
 				$user_info  = get_userdata( $user_id );
-				$user_info->set_role('antique_player');
+				$user_info->set_role('player');
 				
-				$result->success = true;				
-				$result->message = '注册成功！请到您的电子邮箱查看您的验证电子邮件！';
+				// set firebase notification if have
+				if (isset($post_params['firebase_token'])){
+			
+					if (!update_user_meta($user_id, 'firebase_token', $post_params['firebase_token'])){
+						add_user_meta($user_id, 'firebase_token', $post_params['firebase_token'], true);
+					}
+				}
+				
+				// save user selected lang
+				if (!update_user_meta($user_id, 'my_lang', $lang)){
+					add_user_meta($user_id, 'my_lang', $lang, true);
+				}
+				
+				
+				$result['success'] = true;				
+				$result['message'] = antLang('注册成功！请到您的电子邮箱查看您的验证电子邮件！', $lang);
+				$result['message'] = ($lang == 'en')? 'Registration success! Please check your verification email in your email address!':$result['message'];
 				
 				// send email to notify new user
 				if (function_exists('emailNewAccount')){
@@ -293,7 +430,7 @@ class ANTIQUES_USER
 				}			
 			}
 			else {
-				$result->message = 'Registration is not success due to some reason. Please try again!';
+				$result['message'] = 'Registration is not success due to some reason. Please try again!';
 			}
 			
 		}	
@@ -322,14 +459,14 @@ class ANTIQUES_USER
 			return $result;
 		}
 	
-		$result['display_name'] = $userdata->data->display_name;		
+		$result['display_name'] = $user->data->display_name;		
 		$result['success'] = true;
 		
 		return $result;
 	}
 
 	
-	public function profile($post_params){
+	public function profile($post_params, $lang = 'hk'){
 		$result = array(
 			'success'=> false,
 			'message'=>'',
@@ -339,15 +476,16 @@ class ANTIQUES_USER
 		// validate user has the right to create new user
 		$user_id= $this->validateToken($post_params);
 		if ($user_id==false){
-			header('HTTP/1.0 401 Unauthorized');
-			$result['message'] = 'Invalid token!';
+			//header('HTTP/1.0 401 Unauthorized');
+			$result['message'] = antLang('登入已失效. 請重新登入!', $lang);
+			$result['message'] = ($lang == 'en')? 'Login has expired. Please login again!':$result['message'];
 			return $result;			
 		}
 		
 		$user = get_userdata( $user_id );
 		
 		if ( is_wp_error( $user ) ) {
-			$result['message'] = $user->get_error_message();
+			$result['message'] = antLang($user->get_error_message(), $lang);
 			return $result;
 		}
 		
@@ -361,7 +499,7 @@ class ANTIQUES_USER
 	}
 	
 	
-	public function profile_update($post_params){
+	public function profile_update($post_params, $lang = 'hk'){
 		$result = array(
 			'success'=> false,
 			'message'=>'',
@@ -371,8 +509,8 @@ class ANTIQUES_USER
 		// validate user has the right to create new user
 		$user_id= $this->validateToken($post_params);
 		if ($user_id==false){
-			header('HTTP/1.0 401 Unauthorized');
-			$result['message'] = 'Invalid token!';
+			//header('HTTP/1.0 401 Unauthorized');
+			$result['message'] = antLang('登入已失效. 請重新登入!', $lang);
 			return $result;			
 		}
 		
@@ -383,39 +521,16 @@ class ANTIQUES_USER
 			return $result;
         }
 		
-		
-		// check required parameters
-		if ( !isset($post_params['email']) || !is_email($post_params['email']) ){			
-			$result['message'] = 'Invalid user email!';
-			return $result;
-		}
-		// end check required parameters
-		
-		//$user->user_email = trim($post_params['email']);
-
 
 		// check optional parameters
 		if ( isset($post_params['display_name']) ){		
 			$user->data->display_name = sanitize_text_field($post_params['display_name']);				
 		}
-		else{
-			$user->data->display_name = '';
-		}
-		
-		if ( isset($post_params['first_name']) ){			
-			$user->first_name = sanitize_text_field($post_params['first_name']);
-		}
-		else{
-			$user->first_name = '';
-		}
-		
-		if ( isset($post_params['last_name']) ){			
-			$user->last_name = sanitize_text_field($post_params['last_name']);			
-		}
-		else {
-			$user->last_name = '';
+		if (empty($user->data->display_name)){
+			$user->data->display_name = explode('@', $user->user_email)[0];
 		}		
 		
+	
 		// description
 		if ( isset($post_params['description']) ){			
 			$description = sanitize_textarea_field($post_params['description']);			
@@ -424,24 +539,8 @@ class ANTIQUES_USER
 			$description = '';
 		}				
 		$updated = update_user_meta( $user_id, 'description', $description );		
-		if ( $updated === false && $description != get_user_meta($user_id, 'description', true) ){
-			$result['message'] = 'Error on updating user description!';
-			return $result;	
-		}
-		// end description
 		
-		
-		// avatar update
-		$avatar = '';
-		if ( isset($post_params['avatar']) ){			
-			$avatar = sanitize_textarea_field($post_params['avatar']);			
-		}		
-		$avatar_updated = update_user_meta( $user_id, 'author_profile_picture', $avatar );
-		if ( $avatar_updated === false && $avatar != get_user_meta($user_id, 'author_profile_picture', true) ){
-			$result['message'] = 'Error on updating user avatar!';
-			return $result;	
-		}
-		// end avatar update
+		// end description		
 		
 		// end check optional parameters		
 		
@@ -450,23 +549,23 @@ class ANTIQUES_USER
 		
 		if ( is_wp_error( $return_user_id ) ) {
 			// There was an error; possibly this user doesn't exist.
-			$result['message'] = $return_user_id->get_error_message();
+			$result['message'] = antLang($return_user_id->get_error_message(), $lang);
 			return $result;			
 		}
 		
 		
 		
 		// password must be reset after user updated
-		if ( isset($post_params['new_password']) && !empty($post_params['new_password']) ){
+		if ( isset($post_params['updated_password']) && !empty($post_params['updated_password']) ){
 			
-			$new_password = base64_decode(trim($post_params['new_password']));			
+			$updated_password = base64_decode(trim($post_params['updated_password']));			
 			
-			if ( ($valid = validate_password($new_password)) !== true ){
-				$result['message'] = $valid;
+			if ( ($valid = validate_password($updated_password)) !== true ){
+				$result['message'] = antLang($valid, $lang);
 				return $result;	
 			}			
 			
-			reset_password( $user, $new_password );
+			reset_password( $user, $updated_password );
 			$result['reset_password'] = true;
 		}
 		// end password updated
@@ -476,16 +575,17 @@ class ANTIQUES_USER
 		$this->populateUser($user_data);
 		
 		$result['success'] = true;
+		$result['message'] = antLang('更新成功！', $lang);
 		$result['user'] = $this;
 		return $result;
 	}
 
 
-	public function password_reset($post_params){	
+	public function password_reset($post_params, $lang='hk'){	
 
 		$result = array(
 			'success'=>false,
-			'message'=>'重置密码失败！ 请稍后再试！'
+			'message'=>antLang('重置密码失败！ 请稍后再试！', $lang)
 		);
 		
 		if (isset($post_params['email'])){
@@ -504,21 +604,18 @@ class ANTIQUES_USER
 					$random_password = wp_generate_password(16);
 					
 					// reset user pw
-					reset_password( $user, $random_password );
-					
-					//clear user token
-					$this->clearUserTokens($user->data->ID);
+					reset_password( $user, $random_password );					
 						
 					$success = sendNewPwToUser($user->data->display_name, $email, $random_password);
 					if ($success === true){
 						$result['success'] = true;
-						$result['message'] = '重设密码成功！ 请在电子邮件中查找您的新密码！';
+						$result['message'] = antLang('重设密码成功！ 请在电子邮件中查找您的新密码！', $lang);
 					}
 				}				
 				
 			}
 			else {
-				$result['message'] = '电子邮件地址不存在系统中！'; 
+				$result['message'] = antLang('电子邮件地址不存在系统中！', $lang); 
 			}
 		}	
 
@@ -526,11 +623,11 @@ class ANTIQUES_USER
 	}
 
 
-	public function verify_email($post_params){	
+	public function verify_email($post_params, $lang = 'hk'){	
 	
 		$result = array(
 			'success'=>false,
-			'message'=>'验证电子邮件地址失败！',
+			'message'=>antLang('验证电子邮件地址失败！', $lang),
 			'resend_link'=>'',
 			'user' => null,
 		);
@@ -549,7 +646,7 @@ class ANTIQUES_USER
 			
 			if ($approved == '1'){
 				
-				$result['success'] = true;
+				$result['message'] = antLang('您的电子邮件地址已被验证过！', $lang);
 			}
 			else if (isset($saved_key['key']) && isset($saved_key['expiration']) && !empty($saved_key['key']) && $saved_key['key'] == $key && $saved_key['expiration'] >= $now ){
 				update_user_meta($user->ID, 'user-approved','1'); 
@@ -559,7 +656,7 @@ class ANTIQUES_USER
 			}
 			else if (isset($saved_key['key']) && isset($saved_key['expiration']) && !empty($saved_key['key']) && $saved_key['key'] == $key && $saved_key['expiration'] < $now ){				
 				
-				$result['message'] .= ' 验证码已过期！';
+				$result['message'] .= antLang(' 验证码已过期！', $lang);
 				$result['resend_link'] = get_home_url().'/OX/api/user/send/verification?verify='.base64_encode($user->user_email);				
 			}
 			else {
@@ -569,7 +666,7 @@ class ANTIQUES_USER
 		
 		if ($result['success'] == true){
 			
-			$result['message']= '您的帐户已通过验证！';
+			$result['message']= antLang('您的帐户已通过验证！', $lang);
 			
 			$this->populateUser($user);
 			if (isset($post_params['firebase_token'])){
@@ -577,6 +674,11 @@ class ANTIQUES_USER
 				if (!update_user_meta($this->id, 'firebase_token', $post_params['firebase_token'])){
 					add_user_meta($this->id, 'firebase_token', $post_params['firebase_token'], true);
 				}
+			}
+			
+			// save user selected lang
+			if (!update_user_meta($this->id, 'my_lang', $lang)){
+				add_user_meta($this->id, 'my_lang', $lang, true);
 			}
 			
 			//update user token		
@@ -587,6 +689,270 @@ class ANTIQUES_USER
 		
 		return $result;
 		
+	}
+	
+
+	public function langUpdate($post_params, $lang){
+		$result = array(
+			'success'=> false,
+			'message'=>'',			
+		);
+		
+		// validate user has the right to create new user
+		$user_id= $this->validateToken($post_params);
+		if ($user_id==false){
+			//header('HTTP/1.0 401 Unauthorized');
+			$result['message'] = antLang('登入已失效. 請重新登入!', $lang);
+			return $result;			
+		}
+		
+		// save user selected lang
+		if (!update_user_meta($user_id, 'my_lang', $lang)){
+			add_user_meta($user_id, 'my_lang', $lang, true);
+		}
+		
+		$result['success'] = true;
+		return $result;		
+	}
+	
+	
+	public function deleteImage($post_params, $lang){
+		
+		$result = array(
+			'success'=> false,
+			'message'=>'',			
+		);
+		
+		// validate user has the right to create new user
+		$user_id= $this->validateToken($post_params, false);
+		if ($user_id==false){
+			header('HTTP/1.0 401 Unauthorized');			
+			return $result;			
+		}
+		
+		if ( !isset($post_params['image_id']) || empty($post_params['image_id']) || !is_numeric($post_params['image_id'])){
+			$result['message'] = 'Invalid image Id!';
+			return $result;
+		}
+		
+		if ( !isset($post_params['antique_id']) || empty($post_params['antique_id']) || !is_numeric($post_params['antique_id'])){
+			$result['message'] = 'Invalid antique Id!';
+			return $result;
+		}
+		
+		$image_id = intval($post_params['image_id']);
+		$antique_id = intval($post_params['antique_id']);
+		
+		$return = remove_antique_gallery_images_id($antique_id, $image_id);
+		
+		if (is_a($return, 'WP_Post')){
+			$result['success'] = true;
+			$result['message'] = 'Delete image with id '.$image_id.' in antique '.$antique_id.' success';
+		}
+		else{
+			$result['message'] = 'Delete image with id '.$image_id.' in antique '.$antique_id.' failure';
+		}
+		
+		return $result;
+	}
+
+	
+	public function swapImages($post_params, $lang){
+		
+		$result = array(
+			'success'=> false,
+			'message'=>'',			
+		);
+		
+		// validate user has the right to create new user
+		$user_id= $this->validateToken($post_params, false);
+		if ($user_id==false){
+			header('HTTP/1.0 401 Unauthorized');			
+			return $result;			
+		}
+		
+		if ( !isset($post_params['image_id_1']) || empty($post_params['image_id_1']) || !is_numeric($post_params['image_id_1'])){
+			$result['message'] = 'Invalid first image Id!';
+			return $result;
+		}
+		
+		if ( !isset($post_params['image_id_2']) || empty($post_params['image_id_2']) || !is_numeric($post_params['image_id_2'])){
+			$result['message'] = 'Invalid second image Id!';
+			return $result;
+		}
+		
+		if ( !isset($post_params['antique_id']) || empty($post_params['antique_id']) || !is_numeric($post_params['antique_id'])){
+			$result['message'] = 'Invalid antique Id!';
+			return $result;
+		}
+		
+		$image_id_1 = intval($post_params['image_id_1']);
+		$image_id_2 = intval($post_params['image_id_2']);
+		$antique_id = intval($post_params['antique_id']);
+		
+		$result['success'] = swap_antique_gallery_images($antique_id, $image_id_1, $image_id_2);
+		
+		if ($result['success']){
+			$result['message'] = 'swap success from server';
+		}
+		else{
+			$result['message'] = 'swap failure from server';
+		}
+		
+		return $result;
+	}
+
+	
+	public function uploadImage($post_params, $lang){
+		
+		/*
+		var_dump($_FILES);
+
+		"array(1) {
+		  ["image"]=>
+		  array(5) {
+			["name"]=>
+			string(12) "1595536337902.jpeg"
+			["type"]=>
+			string(10) "image/jpeg"
+			["tmp_name"]=>
+			string(14) "/tmp/php9ydynS"
+			["error"]=>
+			int(0)
+			["size"]=>
+			int(614971)
+		  }
+		}
+		*/
+
+		$result = array(
+			'success'=> false,
+			'message'=>'',
+			'attachment_id' => 0,
+			'uploaded_url' => '',
+		);
+		
+		// validate user has the right to create new user
+		$user_id= $this->validateToken($post_params, false);
+		if ($user_id==false){
+			header('HTTP/1.0 401 Unauthorized');			
+			return $result;			
+		}
+		
+		
+		$allowed_type = array('image/jpg','image/jpeg','image/png','image/gif');
+		
+		$file = isset($_FILES['image'])? $_FILES['image']:'';
+		$antique_id = (isset($post_params['antique_id']) && !empty($post_params['antique_id']))? $post_params['antique_id']:0;
+		$attachment_type = isset($post_params['attachment_type'])? $post_params['attachment_type']:'';
+		
+		if (empty($file) || empty($attachment_type)){
+			$result['message'] = 'Invalid parameters!';
+			return $result;
+		}
+		
+		if ( !isset($file['type']) || !in_array($file['type'], $allowed_type)){
+			$result['message'] = 'Invalid image type!';
+			return $result;
+		}
+		
+		
+		// login user
+		if ($user_id != get_current_user_id()){
+			$user = get_user_by( 'id', $user_id );
+			clean_user_cache($user_id);
+			wp_clear_auth_cookie();
+			
+			wp_set_current_user( $user_id, $user->user_login );
+			wp_set_auth_cookie( $user_id );
+			update_user_caches($user);
+		}
+		
+		if (isset($_FILES['image']['name'])){
+			
+			$_FILES['image']['name'] = str_replace('.', $user_id.mt_rand( 10, 1000 ).'.', $_FILES['image']['name']);
+		}
+		
+		
+		// These files need to be included as dependencies when on the front end.
+		require_once( ABSPATH . '/wp-admin/includes/image.php' );
+		require_once( ABSPATH . '/wp-admin/includes/file.php' );
+		require_once( ABSPATH . '/wp-admin/includes/media.php' );
+		
+		// Check that the nonce is valid
+		if ($file['size'] > 0 ){
+			// The nonce was valid, it is safe to continue.	
+
+			$overrides = array(
+				/*
+				 * Tells WordPress to not look for the POST form fields that would
+				 * normally be present, default is true, we downloaded the file from
+				 * a remote server, so there will be no form fields.
+				 */
+				'test_form' => false,
+		 
+				// Setting this to false lets WordPress allow empty files, not recommended.
+				'test_size' => true,
+		 
+				// A properly uploaded file will pass this test. There should be no reason to override this one.
+				'test_upload' => true,
+				
+				'action' => 'wp_handle_sideload',
+			);
+			// Let WordPress handle the upload.
+			
+				
+			// Remember, 'my_image_upload' is the name of our file input in our form above.
+			$attachment_id = media_handle_upload( 'image', $antique_id, array(), $overrides );
+			
+			if ( is_wp_error( $attachment_id ) ) {
+				// There was an error uploading the image.
+				return $result;
+				
+			} else {
+				
+				
+				// The image was uploaded successfully!
+				$image_attributes = wp_get_attachment_image_src($attachment_id, 'medium'); // medium, thumbnail, large, full
+				if ($image_attributes && $image_attributes[1] == 1){
+					$image_attributes = wp_get_attachment_image_src($attachment_id, 'large');
+					$attachment_url = $image_attributes[0];						
+				}
+				else if ( $image_attributes ) {
+					$attachment_url = $image_attributes[0];						
+				}
+
+				$result['success'] = true;
+				$result['uploaded_url'] = $attachment_url;	
+				$result['attachment_id'] = $attachment_id;
+				
+			}		
+			
+		}
+		
+		if (strtoupper($attachment_type) == 'AVATAR' && !empty($result['uploaded_url'])){
+			if (!update_user_meta($user_id, 'author_profile_picture', $result['uploaded_url'])){
+				add_user_meta($user_id, 'author_profile_picture', $result['uploaded_url'], true);
+			}
+		}
+		
+		
+		if (strtoupper($attachment_type) == 'ANTIQUE' && !empty($result['uploaded_url'])){
+			
+			add_antique_gallery_images_id($antique_id, $attachment_id);			
+		}
+		
+		if (strtoupper($attachment_type) == 'ANTIQUE_HEADLINE' && !empty($result['uploaded_url'])){
+			
+			set_antique_headline_image($antique_id, $attachment_id);
+		}
+		
+		if (strtoupper($attachment_type) == 'ANTIQUE_PROMOTION' && !empty($result['uploaded_url'])){
+			
+			set_antique_promotion_image($antique_id, $attachment_id);	
+		}
+		
+		return $result;	
 	}
 	
 	

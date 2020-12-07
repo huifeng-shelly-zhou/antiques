@@ -1,0 +1,40 @@
+[03-Dec-2020 00:55:30 UTC] PHP Fatal error:  Uncaught Error: Call to undefined function get_home_special_antiques() in /home/shezho5/collectionfun.club/wp-content/plugins/antiques-apis/classes/class-antiques.php:650
+Stack trace:
+#0 /home/shezho5/collectionfun.club/wp-content/plugins/antiques-apis/classes/class-antiques-apis.php(710): ANTIQUES->antiqueHomeList(Array, 'cn', 'https://collect...')
+#1 /home/shezho5/collectionfun.club/wp-content/plugins/antiques-apis/classes/class-antiques-apis.php(132): ANTIQUES_APIS->home_list()
+#2 /home/shezho5/collectionfun.club/wp-includes/class-wp-hook.php(287): ANTIQUES_APIS->action_redirect('')
+#3 /home/shezho5/collectionfun.club/wp-includes/class-wp-hook.php(311): WP_Hook->apply_filters(NULL, Array)
+#4 /home/shezho5/collectionfun.club/wp-includes/plugin.php(478): WP_Hook->do_action(Array)
+#5 /home/shezho5/collectionfun.club/wp-includes/template-loader.php(13): do_action('template_redire...')
+#6 /home/shezho5/collectionfun.club/wp-blog-header.php(19): require_once('/home/shezho5/c...')
+#7 /home/shezho5/collectionfun.c in /home/shezho5/collectionfun.club/wp-content/plugins/antiques-apis/classes/class-antiques.php on line 650
+[03-Dec-2020 00:56:39 UTC] PHP Fatal error:  Uncaught Error: Call to undefined function antLang() in /home/shezho5/collectionfun.club/wp-content/plugins/antiques-apis/classes/class-user.php:170
+Stack trace:
+#0 /home/shezho5/collectionfun.club/wp-content/plugins/antiques-apis/classes/class-antiques-apis.php(225): ANTIQUES_USER->login(Array, 'cn')
+#1 /home/shezho5/collectionfun.club/wp-content/plugins/antiques-apis/classes/class-antiques-apis.php(132): ANTIQUES_APIS->user_login()
+#2 /home/shezho5/collectionfun.club/wp-includes/class-wp-hook.php(287): ANTIQUES_APIS->action_redirect('')
+#3 /home/shezho5/collectionfun.club/wp-includes/class-wp-hook.php(311): WP_Hook->apply_filters(NULL, Array)
+#4 /home/shezho5/collectionfun.club/wp-includes/plugin.php(478): WP_Hook->do_action(Array)
+#5 /home/shezho5/collectionfun.club/wp-includes/template-loader.php(13): do_action('template_redire...')
+#6 /home/shezho5/collectionfun.club/wp-blog-header.php(19): require_once('/home/shezho5/c...')
+#7 /home/shezho5/collectionfun.club/index.php(17): require('/home/shezho5/c...') in /home/shezho5/collectionfun.club/wp-content/plugins/antiques-apis/classes/class-user.php on line 170
+[03-Dec-2020 00:57:32 UTC] PHP Fatal error:  Uncaught Error: Call to undefined function antLang() in /home/shezho5/collectionfun.club/wp-content/plugins/antiques-apis/classes/class-antiques.php:211
+Stack trace:
+#0 /home/shezho5/collectionfun.club/wp-content/plugins/antiques-apis/classes/class-antiques.php(873): USUR_ANTIQUE_LIST_ITEM->__construct(13, 'cn')
+#1 /home/shezho5/collectionfun.club/wp-content/plugins/antiques-apis/classes/class-antiques-apis.php(673): ANTIQUES->getUserAntiqueList('2', 'cn', 1)
+#2 /home/shezho5/collectionfun.club/wp-content/plugins/antiques-apis/classes/class-antiques-apis.php(132): ANTIQUES_APIS->user_antique_list()
+#3 /home/shezho5/collectionfun.club/wp-includes/class-wp-hook.php(287): ANTIQUES_APIS->action_redirect('')
+#4 /home/shezho5/collectionfun.club/wp-includes/class-wp-hook.php(311): WP_Hook->apply_filters(NULL, Array)
+#5 /home/shezho5/collectionfun.club/wp-includes/plugin.php(478): WP_Hook->do_action(Array)
+#6 /home/shezho5/collectionfun.club/wp-includes/template-loader.php(13): do_action('template_redire...')
+#7 /hom in /home/shezho5/collectionfun.club/wp-content/plugins/antiques-apis/classes/class-antiques.php on line 211
+[03-Dec-2020 00:58:34 UTC] PHP Fatal error:  Uncaught Error: Call to undefined function get_home_special_antiques() in /home/shezho5/collectionfun.club/wp-content/plugins/antiques-apis/classes/class-antiques.php:650
+Stack trace:
+#0 /home/shezho5/collectionfun.club/wp-content/plugins/antiques-apis/classes/class-antiques-apis.php(710): ANTIQUES->antiqueHomeList(Array, 'cn', 'https://collect...')
+#1 /home/shezho5/collectionfun.club/wp-content/plugins/antiques-apis/classes/class-antiques-apis.php(132): ANTIQUES_APIS->home_list()
+#2 /home/shezho5/collectionfun.club/wp-includes/class-wp-hook.php(287): ANTIQUES_APIS->action_redirect('')
+#3 /home/shezho5/collectionfun.club/wp-includes/class-wp-hook.php(311): WP_Hook->apply_filters(NULL, Array)
+#4 /home/shezho5/collectionfun.club/wp-includes/plugin.php(478): WP_Hook->do_action(Array)
+#5 /home/shezho5/collectionfun.club/wp-includes/template-loader.php(13): do_action('template_redire...')
+#6 /home/shezho5/collectionfun.club/wp-blog-header.php(19): require_once('/home/shezho5/c...')
+#7 /home/shezho5/collectionfun.c in /home/shezho5/collectionfun.club/wp-content/plugins/antiques-apis/classes/class-antiques.php on line 650
