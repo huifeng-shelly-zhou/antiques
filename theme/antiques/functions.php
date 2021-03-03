@@ -52,4 +52,45 @@ function add_theme_scripts() {
 	
 }
 
+add_action('init', 'antique_rewrite_permastruct');
+function antique_rewrite_permastruct() {
+    global $wp_rewrite;
+	
+	// add post url rule
+	add_rewrite_rule('article/([0-9]+)/?','index.php?p=$matches[1]','top');	
+	
+	// rewrite author url
+	$wp_rewrite->author_base = 'author';
+	$wp_rewrite->author_structure = '/' . $wp_rewrite->author_base . '/%author_id%-%author_displayname%';	
+	add_rewrite_rule('author/([0-9]+)-([^/]*)/?','index.php?author=$matches[1]&author_displayname=$matches[2]','top');
+	add_rewrite_rule('author/([0-9]+)/?','index.php?author=$matches[1]','top');
+	
+	$wp_rewrite->flush_rules();		
+}
+
+add_filter('author_link', 'antique_author_link',10,3);
+function antique_author_link($url,$author_id,$author_nicename) {	
+	//var_dump($url);
+	$url = str_replace( '/article', '', $url );	
+	if ( false !== strpos( $url, '%author_id%' ) ) {
+		if(!isset($author_id)){
+			$author_id = 0;
+		}
+		$url = str_replace( '%author_id%', $author_id, $url );	
+	
+    }
+	
+	if ( false !== strpos( $url, '%author_displayname%' ) ) {
+		$author_display_name = '';
+		
+		$author_obj = get_user_by('id', $author_id);
+		if(is_a($author_obj, 'WP_User')){
+			$author_display_name = urlencode($author_obj->display_name);			
+		}
+		$url = str_replace( '%author_displayname%', $author_display_name, $url );       
+	}
+	
+    return $url;
+}
+
 ?>

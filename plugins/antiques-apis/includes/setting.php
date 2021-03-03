@@ -29,6 +29,6 @@ $Feeds = array(
 			'url'=>''
 		),		
 	),
-	'languages'=> $languages,
+	'languages'=> $languages,	
 );
 ?>

@@ -30,15 +30,17 @@ class ANTIQUES_USER
 			$this->email = $user->user_email;			
 			$this->roles = $user->roles;
 			
+			$avatar_data = get_avatar_data($user->ID);
+			if( isset($avatar_data['url']) ){
+				$this->avatar = $avatar_data['url'];
+			}
+			
 			$user_meta = get_user_meta($user->ID);
 			foreach($user_meta as $key=>$value){
 				
 				if ($key == 'description'){
 					$this->description = $value[0];
-				}
-				else if($key == 'author_profile_picture'){
-					$this->avatar = $value[0];
-				}
+				}				
 				else if($key == 'login_providers'){
 					$this->providers = unserialize($value[0]);
 				}
@@ -357,7 +359,7 @@ class ANTIQUES_USER
 		list($email, $password)=explode(':',base64_decode($post_params['authorize']));
 		
 		if (is_email( $email ) == false){
-			$result['message'] = antLang('电子信箱格式不符!', $lang);
+			$result['message'] = antLang('电子信箱格式不正确!', $lang);
 			$result['message'] = ($lang == 'en')? 'Invalid email address.':$result['message'];
 			return $result;
 		}	
@@ -478,7 +480,7 @@ class ANTIQUES_USER
 		if ($user_id==false){
 			//header('HTTP/1.0 401 Unauthorized');
 			$result['message'] = antLang('登入已失效. 請重新登入!', $lang);
-			$result['message'] = ($lang == 'en')? 'Login has expired. Please login again!':$result['message'];
+			$result['message'] = ($lang == 'en')? 'Login has been expired. Please login again!':$result['message'];
 			return $result;			
 		}
 		
@@ -511,6 +513,7 @@ class ANTIQUES_USER
 		if ($user_id==false){
 			//header('HTTP/1.0 401 Unauthorized');
 			$result['message'] = antLang('登入已失效. 請重新登入!', $lang);
+			$result['message'] = ($lang == 'en')? 'Login has been expired. Please login again!':$result['message'];
 			return $result;			
 		}
 		
@@ -560,8 +563,8 @@ class ANTIQUES_USER
 			
 			$updated_password = base64_decode(trim($post_params['updated_password']));			
 			
-			if ( ($valid = validate_password($updated_password)) !== true ){
-				$result['message'] = antLang($valid, $lang);
+			if ( ($valid = validate_password($updated_password, $lang)) !== true ){
+				$result['message'] = $valid;
 				return $result;	
 			}			
 			
@@ -576,6 +579,7 @@ class ANTIQUES_USER
 		
 		$result['success'] = true;
 		$result['message'] = antLang('更新成功！', $lang);
+		$result['message'] = ($lang == 'en')? 'Update success!':$result['message'];
 		$result['user'] = $this;
 		return $result;
 	}
@@ -585,7 +589,7 @@ class ANTIQUES_USER
 
 		$result = array(
 			'success'=>false,
-			'message'=>antLang('重置密码失败！ 请稍后再试！', $lang)
+			'message'=> ($lang == 'en')? 'Password reset failed. Please try again later!':antLang('重置密码失败。请稍后再试！', $lang)
 		);
 		
 		if (isset($post_params['email'])){
@@ -609,13 +613,13 @@ class ANTIQUES_USER
 					$success = sendNewPwToUser($user->data->display_name, $email, $random_password);
 					if ($success === true){
 						$result['success'] = true;
-						$result['message'] = antLang('重设密码成功！ 请在电子邮件中查找您的新密码！', $lang);
+						$result['message'] = ($lang == 'en')? 'Password reset success. Please find your new password in your email!':antLang('重设密码成功。请在电子邮件中查找您的新密码！', $lang);
 					}
 				}				
 				
 			}
 			else {
-				$result['message'] = antLang('电子邮件地址不存在系统中！', $lang); 
+				$result['message'] = ($lang == 'en')? 'The email address does not exist in the system!':antLang('电子邮件地址不存在系统中！', $lang); 
 			}
 		}	
 
@@ -627,7 +631,7 @@ class ANTIQUES_USER
 	
 		$result = array(
 			'success'=>false,
-			'message'=>antLang('验证电子邮件地址失败！', $lang),
+			'message'=>($lang == 'en')? 'Failed to verify email address!':antLang('验证电子邮件地址失败！', $lang),
 			'resend_link'=>'',
 			'user' => null,
 		);
@@ -646,7 +650,7 @@ class ANTIQUES_USER
 			
 			if ($approved == '1'){
 				
-				$result['message'] = antLang('您的电子邮件地址已被验证过！', $lang);
+				$result['message'] = ($lang == 'en')? 'Your email address has been verified!':antLang('您的电子邮件地址已被验证过！', $lang);
 			}
 			else if (isset($saved_key['key']) && isset($saved_key['expiration']) && !empty($saved_key['key']) && $saved_key['key'] == $key && $saved_key['expiration'] >= $now ){
 				update_user_meta($user->ID, 'user-approved','1'); 
@@ -656,7 +660,7 @@ class ANTIQUES_USER
 			}
 			else if (isset($saved_key['key']) && isset($saved_key['expiration']) && !empty($saved_key['key']) && $saved_key['key'] == $key && $saved_key['expiration'] < $now ){				
 				
-				$result['message'] .= antLang(' 验证码已过期！', $lang);
+				$result['message'] .= ($lang == 'en')? ' Your verification code has expired!':antLang(' 验证码已过期！', $lang);
 				$result['resend_link'] = get_home_url().'/OX/api/user/send/verification?verify='.base64_encode($user->user_email);				
 			}
 			else {
@@ -666,7 +670,7 @@ class ANTIQUES_USER
 		
 		if ($result['success'] == true){
 			
-			$result['message']= antLang('您的帐户已通过验证！', $lang);
+			$result['message']= ($lang == 'en')? 'Your account has been verified!':antLang('您的帐户已通过验证！', $lang);
 			
 			$this->populateUser($user);
 			if (isset($post_params['firebase_token'])){
@@ -703,6 +707,7 @@ class ANTIQUES_USER
 		if ($user_id==false){
 			//header('HTTP/1.0 401 Unauthorized');
 			$result['message'] = antLang('登入已失效. 請重新登入!', $lang);
+			$result['message'] = ($lang == 'en')? 'Login has been expired. Please login again!':$result['message'];
 			return $result;			
 		}
 		

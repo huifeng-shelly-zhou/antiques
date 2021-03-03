@@ -37,6 +37,7 @@ class ANTIQUES_APIS {
 		require_once plugin_dir_path( dirname( __FILE__ ) ) . 'classes/class-antiques.php';	
 		require_once plugin_dir_path( dirname( __FILE__ ) ) . 'classes/class-message.php';	
 		require_once plugin_dir_path( dirname( __FILE__ ) ) . 'classes/class-antiques-options.php';	
+		require_once plugin_dir_path( dirname( __FILE__ ) ) . 'classes/class-author.php';	
 	}
 	
 	public function init_hooks(){
@@ -775,6 +776,17 @@ class ANTIQUES_APIS {
 		
 		$result['success'] = true;
 		return $result;	
+	}
+	
+	
+	private function author_single(){
+		
+		global $lang;
+		
+		if ( class_exists('ANTIQUES_AUTHOR') ){			
+			return new ANTIQUES_AUTHOR($_POST, $lang);
+		}
+		return $this->error_response;		
 	}
 
 	

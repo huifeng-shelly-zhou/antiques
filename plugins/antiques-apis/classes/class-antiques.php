@@ -56,19 +56,37 @@ class ANTIQUE_LIST_ITEM{
 			//}
 			
 			// location
-			$locations = wp_get_post_terms($post->ID, 'location', array( 'fields' => 'names' ));
-			if (is_array($locations) && count($locations) > 0){
-				$this->location_names = implode(',',$locations);
-				$this->location_names = antLang($this->location_names, $lang);
+			if ($lang == 'en'){
+				$locations = wp_get_post_terms($post->ID, 'location', array( 'fields' => 'slugs' ));
+				if (is_array($locations) && count($locations) > 0){
+					$this->location_names = implode(',',$locations);
+					$this->location_names = ucwords(str_replace('-', ' ', $this->location_names));
+				}
 			}
+			else{
+				$locations = wp_get_post_terms($post->ID, 'location', array( 'fields' => 'names' ));
+				if (is_array($locations) && count($locations) > 0){
+					$this->location_names = implode(',',$locations);
+					$this->location_names = antLang($this->location_names, $lang);
+				}
+			}
+			
 			
 			// categoreis
-			$categoreis = wp_get_post_terms($post->ID, 'antique_cat', array( 'fields' => 'names' ));
-			if (is_array($categoreis) && count($categoreis) > 0){
-				$this->category_names = implode(',',$categoreis);
-				$this->category_names = antLang($this->category_names, $lang);
+			if ($lang == 'en'){
+				$categoreis = wp_get_post_terms($post->ID, 'antique_cat', array( 'fields' => 'slugs' ));
+				if (is_array($categoreis) && count($categoreis) > 0){
+					$this->category_names = implode(',',$categoreis);
+					$this->category_names = ucwords(str_replace('-', ' ', $this->category_names));
+				}
 			}
-			
+			else{
+				$categoreis = wp_get_post_terms($post->ID, 'antique_cat', array( 'fields' => 'names' ));
+				if (is_array($categoreis) && count($categoreis) > 0){
+					$this->category_names = implode(',',$categoreis);
+					$this->category_names = antLang($this->category_names, $lang);
+				}
+			}			
 		}
 	}	
 }
@@ -130,18 +148,37 @@ class ANTIQUE_SINGLE{
 			}			
 			
 			// location
-			$locations = wp_get_post_terms($post->ID, 'location', array( 'fields' => 'names' ));
-			if (is_array($locations) && count($locations) > 0){
-				$this->location_names = implode(',',$locations);
-				$this->location_names = antLang($this->location_names, $lang);
+			if ($lang == 'en'){
+				$locations = wp_get_post_terms($post->ID, 'location', array( 'fields' => 'slugs' ));
+				if (is_array($locations) && count($locations) > 0){
+					$this->location_names = implode(',',$locations);
+					$this->location_names = ucwords(str_replace('-', ' ', $this->location_names));
+				}
 			}
+			else{
+				$locations = wp_get_post_terms($post->ID, 'location', array( 'fields' => 'names' ));
+				if (is_array($locations) && count($locations) > 0){
+					$this->location_names = implode(',',$locations);
+					$this->location_names = antLang($this->location_names, $lang);
+				}
+			}			
 			
 			// categoreis
-			$categoreis = wp_get_post_terms($post->ID, 'antique_cat', array( 'fields' => 'names' ));
-			if (is_array($categoreis) && count($categoreis) > 0){
-				$this->category_names = implode(',',$categoreis);
-				$this->category_names = antLang($this->category_names, $lang);
+			if ($lang == 'en'){
+				$categoreis = wp_get_post_terms($post->ID, 'antique_cat', array( 'fields' => 'slugs' ));
+				if (is_array($categoreis) && count($categoreis) > 0){
+					$this->category_names = implode(',',$categoreis);
+					$this->category_names = ucwords(str_replace('-', ' ', $this->category_names));
+				}
 			}
+			else{
+				$categoreis = wp_get_post_terms($post->ID, 'antique_cat', array( 'fields' => 'names' ));
+				if (is_array($categoreis) && count($categoreis) > 0){
+					$this->category_names = implode(',',$categoreis);
+					$this->category_names = antLang($this->category_names, $lang);
+				}
+			}
+			
 			
 			// images			
 			$gallery_images = get_antique_gallery_images($post->ID, 'medium');
@@ -218,12 +255,22 @@ class USUR_ANTIQUE_LIST_ITEM{
 			}
 			
 			// location
-			$locations = wp_get_post_terms($post->ID, 'location', array( 'fields' => 'names' ));
-			if (is_array($locations) && count($locations) > 0){
-				
-				$this->location = implode(',',$locations);	
-				$this->location = antLang($this->location, $lang_version);
+			if ($lang == 'en'){
+				$locations = wp_get_post_terms($post->ID, 'location', array( 'fields' => 'slugs' ));
+				if (is_array($locations) && count($locations) > 0){
+					$this->location = implode(',',$locations);
+					$this->location = ucwords(str_replace('-', ' ', $this->location));
+				}
 			}
+			else{
+				$locations = wp_get_post_terms($post->ID, 'location', array( 'fields' => 'names' ));
+				if (is_array($locations) && count($locations) > 0){
+					
+					$this->location = implode(',',$locations);	
+					$this->location = antLang($this->location, $lang_version);
+				}
+			}
+			
 		}		
 	}
 }
@@ -425,13 +472,13 @@ class ANTIQUES
 		
 		$filters = array();
 		
-		$all_cats_text = ($lang == 'en')? 'All Categories':'所有分類';
+		$all_cats_text = ($lang == 'en')? 'Categories':'所有分類';
 		$categories_top_levels1 = array(0=> $this->getTermInfo(null, $lang, $all_cats_text, 'antique_cat'));
 		$categories_top_levels2 = $this->getTermsMax3Levels('antique_cat', $lang, true);		
 		$filters['categories'] = array_merge($categories_top_levels1, $categories_top_levels2);	
 		
 		
-		$all_locations_text = ($lang == 'en')? 'All Locations':'所有地區';
+		$all_locations_text = ($lang == 'en')? 'Locations':'所有地區';
 		$locations_top_levels1 = array(0=> $this->getTermInfo(null, $lang, $all_locations_text, 'location'));			
 		$locations_top_levels2 = $this->getTermsMax3Levels('location', $lang, true);
 		$filters['locations'] = array_merge($locations_top_levels1, $locations_top_levels2);
@@ -527,9 +574,9 @@ class ANTIQUES
 			$last_post_id = $post_data['last_post_id'];
 		}
 		
-		if ( isset($post_data['s']) && !empty($post_data['s']) ){
+		if ( isset($post_data['c_s']) && !empty($post_data['c_s']) ){
 			$is_home = false;
-			$args['s'] = $post_data['s'];
+			$args['s'] = $post_data['c_s'];
 		}		
 		
 		if (isset($args['tax_query']) && count($args['tax_query'])>1){
